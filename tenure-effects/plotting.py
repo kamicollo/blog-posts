@@ -16,12 +16,12 @@ def basic_eda(activity):
     c1 = alt.Chart(by_tenure_day).mark_line().encode(
         x=alt.X("tenure_day:O", title="Tenure day", axis=alt.Axis(labelAngle=0)),
         y=alt.Y("visit", title='% active users')
-    ).properties(title='Drop-off curve')
+    ).properties(title='Drop-off curve', height=150)
 
     c2 = alt.Chart(by_weekday).mark_line().encode(
         x=alt.X("day_of_week:O", sort=WEEKDAYS, title='Day of week', axis=alt.Axis(labelAngle=0)),
         y=alt.Y("visit", title='% active users')
-    ).properties(title='% active users by day of the week')
+    ).properties(title='% active users by day of the week', height=150)
 
     c3 = alt.Chart(by_signup_day).mark_line().encode(
         x=alt.X("signup_day_of_week:O", sort=WEEKDAYS, title='Signup day of the week', axis=alt.Axis(labelAngle=0)),
@@ -32,7 +32,7 @@ def basic_eda(activity):
             ),
             title='% active users'
         )
-    ).properties(title='% Active users by signup day')
+    ).properties(title='% Active users by signup day', height=150)
 
     return c1, c2, c3
 
@@ -71,7 +71,7 @@ def plot_effects(df, var_name, title, sort="ascending", y_title="Δ probability"
             alt.Color('source'),
         )
 
-    return final_chart.properties(title=title, height=200)
+    return final_chart.properties(title=title, height=100)
 
 
 def plot_all_params(all_params):
@@ -85,7 +85,7 @@ def plot_all_params(all_params):
         plot_effects(all_params, 'signup_day_of_week', 'Signup day of week effects', sort=WEEKDAYS),        
         plot_effects(all_params, 'is_newsletter_day', 'Newsletter day effects'),
     ) & alt.hconcat(
-        plot_effects(all_params, 'tenure_day', 'Tenure effects').properties(width=460),
+        plot_effects(all_params, 'tenure_day', 'Tenure effects').properties(width=400),
     )
 
 def visualize_tenure_prior(prior, name, subtitle, prior_set):
@@ -105,7 +105,7 @@ def visualize_tenure_prior(prior, name, subtitle, prior_set):
         alt.X('variable'), alt.Y('value'), alt.Detail('draw')
     ) + alt.Chart(mean_line).mark_line(color='red').encode(
         alt.X('variable', title='Tenure day'), alt.Y('value', title='Visit probability'), alt.Detail('draw')
-    ).properties(title={'text': name, 'subtitle': subtitle}, width=200, height=200) 
+    ).properties(title={'text': name, 'subtitle': subtitle}, width=150, height=150) 
 
 def plot_tenure_priors(params, prior_set):
     return alt.vconcat(
@@ -176,10 +176,11 @@ def plot_all_effects(all_params):
     return alt.hconcat(    
         plot_effects(all_params, 'motivation', 'Baseline motivation', y_title="Probability to visit"),
         plot_effects(all_params, 'day_of_week', 'Day of week effects', sort=WEEKDAYS),
+    ) & alt.hconcat(
         plot_effects(all_params, 'signup_day_of_week', 'Signup day of week effects', sort=WEEKDAYS),        
         plot_effects(all_params, 'is_newsletter_day', 'Newsletter day effects'),
     ) & alt.hconcat(
-        plot_effects(all_params, 'tenure_day', 'Tenure effects').properties(width=600, height=250),
+        plot_effects(all_params, 'tenure_day', 'Tenure effects').properties(width=300, height=150),
     )
 
 
