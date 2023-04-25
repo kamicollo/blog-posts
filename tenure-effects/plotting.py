@@ -30,9 +30,9 @@ def basic_eda(activity):
             scale=alt.Scale(
                 domain=[by_signup_day['visit'].min()*0.9, by_signup_day['visit'].max()*1.1]
             ),
-            title='% active users'
+            title='% active days'
         )
-    ).properties(title='% Active users by signup day', height=150)
+    ).properties(title='% Active days by user signup day', height=150)
 
     return c1, c2, c3
 

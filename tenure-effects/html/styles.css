@@ -29096,3 +29096,51 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 
     }
 
+
+
+    .dataframe tbody tr th:only-of-type {
+
+        vertical-align: middle;
+
+    }
+
+
+
+    .dataframe tbody tr th {
+
+        vertical-align: top;
+
+    }
+
+
+
+    .dataframe thead th {
+
+        text-align: right;
+
+    }
+
+
+
+    .dataframe tbody tr th:only-of-type {
+
+        vertical-align: middle;
+
+    }
+
+
+
+    .dataframe tbody tr th {
+
+        vertical-align: top;
+
+    }
+
+
+
+    .dataframe thead th {
+
+        text-align: right;
+
+    }
+
