@@ -1,0 +1,35 @@
+---
+title: "Estimating power and statistical significance in multi-variant A/B tests"
+output: github_document
+---
+
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+
+```
+```{r}
+baseline = 0.3
+within_var = baseline * (1 - baseline)
+
+power.anova.test(groups=2, n=100, within.var = 0.21, power=0.8)
+
+power.prop.test(n=1000, p1=baseline, power=0.8)
+```
+```{r}
+baseline_mean = 0.4
+baseline_sd = sqrt(baseline_mean * (1 - baseline_mean))
+
+pp = power.t.test(n=6000, delta=NULL, sd=baseline_sd, power=0.8)
+
+pp
+```
+```{r}
+power.anova.test(groups=2, n=6000, within.var = baseline_sd ** 2, power=0.8)
+```
+```{r}
+var(c(baseline_mean, baseline_mean + pp$delta))
+```
+
