@@ -1,0 +1,105 @@
+---
+title: "Always valid p-values"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+n = 5000
+p = 0.6
+power = 0.8
+alpha = 0.05
+p2 = power.prop.test(n=n, p1=p, power=power, sig.level=alpha)$p2
+p2 = power.t.test(n=n, sd = sqrt(p * (1-p)), sig.level=alpha, power=power, type='one.sample')$delta + p
+```
+
+```{r}
+
+peek_times = seq(from=n/10, to=n, by=n/10)
+n_sim = 1000
+
+
+res = lapply(1:n_sim, function(s) {
+  obs = rbinom(n, 1, prob = p)
+  sapply(peek_times, function(i) {
+    c(
+      sim=s, 
+      n=i, 
+      pvalue=t.test(obs[1:i], mu=p2, conf.level = 1 - alpha)$p.value
+      
+    )
+  })
+})
+
+
+result_df = as_tibble(t(do.call(cbind, res))) 
+
+result_df %>% filter(pvalue < 0.05) %>% distinct(sim) %>% nrow() / n_sim
+
+result_df %>% filter(pvalue < 0.05) %>% group_by(sim) %>% summarize(steps_needed = min(n)) %>%
+  ggplot() + geom_histogram(aes(steps_needed), binwidth = n/20)
+
+```
+
+```{r}
+alpha = 0.05
+power = 0.9
+p = 0.2
+p2 = 0.25
+n = power.prop.test(p = p, p2 = p2, sig.level = alpha, power = power)$n
+I = ((qnorm(1 - alpha / 2) + qnorm(power)) / (p - p2)) ** 2
+
+R = 1.049
+Imax = R * I
+
+do_test = function(obs1, obs2) {
+  p1 = mean(obs1)
+  p2 = mean(obs2)
+  n1 = length(obs1)
+  n2 = length(obs2)
+  I = (p1 * (1 - p1) / n1 + p2 * (1 - p2) / n2) ** (-1)
+  Z = (p1 - p2) * sqrt(I)
+  a = alpha * min(1, (I / Imax) ** 3)
+  b = (1 - power) * min(1, (I / Imax) ** 3)
+  c(z=Z, a=a, b=b, reject=abs(Z) > b, accept=abs(Z) < a)
+}
+
+I
+```
+
+```{r}
+obs1 = rbinom(n, 1, prob = p)
+obs2 = rbinom(n, 1, prob = p)
+
+
+print(round(do_test(obs1[1:300], obs2[1:300]),4))
+print(round(do_test(obs1[1:600], obs2[1:600]),4))
+print(round(do_test(obs1[1:900], obs2[1:900]),4))
+print(round(do_test(obs1[1:1200], obs2[1:1200]),4))
+print(round(do_test(obs1, obs2),4))
+
+t.test(obs1, obs2)
+```
+
+
+```{r}
+power.prop.test(p1=0.2,p2=0.25, power=0.9)
+```
+```{r}
+plan.GST(K=5, SF=1, alpha=0.025, delta=0.05, pow=0.9, phi=0)
+```
+
+```{r}
+library(confseq)
+?confseq::gamma_exponential_log_mixture
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
