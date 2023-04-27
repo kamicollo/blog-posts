@@ -1,0 +1,131 @@
+---
+title: "R Notebook"
+output: github_document
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+```{r}
+library(gamlss)
+library(broom)
+
+```
+
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+
+no_users = 5000
+mde = 0.03
+
+result = pbsapply(1:1000, function(i) {
+
+  probs_control = rbeta(no_users, 0.1, 0.1)
+  probs_test = pmin(rbeta(no_users, 0.1, 0.1) + mde, 1)
+  
+  daysTracked_control = sapply(probs_control, function(p) rbinom(1, 7, p))
+  daysTracked_test = sapply(probs_test, function(p) rbinom(1, 7, p))
+
+  F3_control = (daysTracked_control >= 3) * 1
+  F3_test = (daysTracked_test >= 3) * 1
+  
+  df = bind_rows(
+    tibble(s=daysTracked_test, trials=7, test = 1),
+    tibble(s=daysTracked_control, trials=7, test = 0)
+  )
+  
+  fit = gamlss(cbind(s, trials - s) ~ test,
+              data = df,
+              family = BB(mu.link = 'identity'))
+
+  ft = summary(fit)
+  
+  pval_bb = ft[2,4]
+  diff = ft[2,1]
+  intercept = ft[1,1]
+
+  c(
+    pval_binary = t.test(F3_control, F3_test)$p.value, 
+    pval_normal = t.test(daysTracked_control, daysTracked_test)$p.value,
+    meanProb_test = mean(probs_test),
+    meanProb_control = mean(probs_control),
+    meanDays_test = mean(daysTracked_test),
+    meanDays_control = mean(daysTracked_control),
+    meanF3_test = mean(F3_test),
+    meanF3_control = mean(F3_control),
+    days_control = daysTracked_control[1],
+    days_test = daysTracked_test[1],
+    pval_bb = pval_bb,
+    prob_test = diff + intercept,
+    prob_control = intercept
+  )
+}, cl=4)
+
+
+result_df = t(result) |> as_tibble() |>  
+  pivot_longer(everything(), names_to = c('variable', 'group'), names_sep="_") 
+
+result_df |> 
+filter(group %in% c('test', 'control')) |> 
+ggplot() + geom_density(aes(x=value, color=group, fill=group), alpha=0.5) +
+  facet_wrap(~variable, scales="free")
+
+
+```
+
+```{r}
+result_df |> 
+  filter(group %in% c('test', 'control')) |> 
+  pivot_wider(variable, names_from=group, values_from = value, values_fn = mean) |>
+  mutate(diff = test - control)
+```
+
+
+```{r}
+result_df |> filter(group %in% c('normal', 'binary', 'bb')) |>  
+  pivot_wider(variable, names_from=group, values_from = value, values_fn = function(i) mean(i < 0.05))
+```
+
+```{r}
+  probs_control = rbeta(no_users, 10, 10)
+  probs_test = pmin(probs_control + mde, 1)
+  mean(probs_control)
+  mean(probs_test)
+  sd(probs_control)
+
+```
+```{r}
+  
+  daysTracked_control = sapply(probs_control, function(p) rbinom(1, 7, p))
+  daysTracked_test = sapply(probs_test, function(p) rbinom(1, 7, p))
+
+  F3_control = (daysTracked_control >= 3) * 1
+  F3_test = (daysTracked_test >= 3) * 1
+  
+  df = bind_rows(
+    tibble(s=daysTracked_test, trials=7, test = 1),
+    tibble(s=daysTracked_control, trials=7, test = 0)
+  )
+  
+  fit = gamlss(cbind(s, trials - s) ~ test,
+              data = df,
+              family = BB(mu.link = 'identity'))
+
+  ft = summary(fit)
+```
+```{r}
+library(aod)
+library(rbenchmark)
+
+benchmark(gamlss(cbind(s, trials - s) ~ test, data = df, family = BB(mu.link = 'identity')))
+```
+
+```{r}
+benchmark(betabin(cbind(s, trials - s) ~ test, ~ 1, data = df))
+```
+```{r}
+library(VGAM)
+benchmark(VGAM::vglm(cbind(s, trials - s) ~ test, data=df, trace = FALSE, family=betabinomial))
+```
+
