@@ -1,0 +1,116 @@
+---
+title: "Clustering"
+author: "Aurimas Racas"
+date: "10/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(osmdata)
+library(sf)
+library(tidyverse)
+library(leaflet)
+library(ggplot2)
+library(ggforce)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+## https://towardsdatascience.com/loading-data-from-openstreetmap-with-python-and-the-overpass-api-513882a27fd0
+## https://wiki.openstreetmap.org/wiki/Key:cuisine
+## https://nkaza.github.io/post/2020-02-12-extracting-data-from-openstreetmap/
+
+
+```{r cars}
+
+convert_key_value = function(l) {
+  mapply(function (x,y) paste0('"',y,'"="',x,'"'), l, names(l), USE.NAMES = F)
+}
+
+bbox = c(-74.02, 40.7, -73.97, 40.78)
+bbox2 = getbb ("Manhattan, New York")
+
+data_from_osm_df <- opq (bbox = bbox, nodes_only = T) %>% #gets bounding box
+  add_osm_features(features = convert_key_value(list(shop="electronics", shop="computer", shop="hifi", shop="games", shop="camera", shop="anime"))) %>%
+  #add_osm_feature(key = "cuisine", value = "asian") %>% #searches for restaurants
+  #add_osm_feature(key = "shop", value = "computer") %>% #searches for restaurants
+  osmdata_sf() #download OSM data as sf
+
+#select name and geometry from point data for restaurants
+cafe_osm <- data_from_osm_df$osm_points %>% #select point data from downloaded OSM data
+  dplyr::select(name, geometry) #for now just selecting the name and geometry to plot
+
+#create a plot in leaflet
+leaflet() %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addCircles(data = cafe_osm)
+```
+
+```{r try rotation}
+
+dt = matrix(c(0, -1, 2, -1), 2, 2, dimnames = list(c("",""),c("x", "y")))
+
+rotation = matrix(c(sqrt(2)/2,-sqrt(2)/2,sqrt(2)/2, sqrt(2)/2),2,2, dimnames = list(c("",""),c("x", "y")))
+
+degrees = -pi/180*29
+
+rot2 = matrix(c(cos(degrees), sin(degrees), -sin(degrees), cos(degrees)), 2, 2, dimnames = list(c("",""),c("x", "y")))
+
+rotated = dt %*% rot2
+
+bind_rows(
+  dt %>% as_tibble() %>% mutate(gr = "original"),
+  rotated %>% as_tibble() %>% mutate(gr = "rotated")
+) %>%
+ggplot() + geom_point(aes(x=x, y=y, col=gr)) + xlim(-4,4) + ylim(-4,4) +
+  geom_vline(xintercept = 0) + geom_hline(yintercept = 0)
+
+```
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+
+original_points = cafe_osm$geometry %>% st_coordinates() %>% as_tibble() %>%
+  rename(y=Y,x=X)
+
+rotated_points = as.matrix(original_points) %*% rot2 %>% as_tibble()
+
+ggplot(rotated_points) + geom_point(aes(x=x, y=y)) +  coord_equal(1/1.26)
+```
+
+```{r euclidean_kmeans}
+scaled = scale(original_points)
+
+set.seed(12345)
+km = kmeans(scaled, centers=4, iter.max = 1000)
+centers = km$centers %>% as_tibble(rownames = "cluster")
+
+scaled %>% as_tibble() %>% mutate(cluster = as.factor(km$cluster)) %>%
+  ggplot() + geom_point(aes(x=x, y=y), size=1) + 
+  geom_mark_hull(aes(x=x, y=y, col=cluster), expand = 0.02) + 
+  #geom_point(aes(x=x,y=y,col=cluster), data=centers, shape="star") +
+  #coord_fixed(ratio=1/1.26, ylim=c(40.7, 40.776), xlim=c(-74.03, -73.96)) +
+  NULL
+  
+```
+```{r map_geom}
+
+o_dt = original_points %>% mutate(cluster = as.factor(km$cluster))
+
+base_map = get_stamenmap(bbox = bbox, maptype = "toner-lite", crop = FALSE, zoom = 14)
+ggmap(base_map) + 
+  geom_point(aes(x=x, y=y), size=1, data=o_dt) + 
+  coord_fixed(ratio=80/101, ylim=c(40.7, 40.776), xlim=c(-74.02, -73.965)) +
+  geom_mark_hull(aes(x=x, y=y, fill=cluster), expand = 0.02, data=o_dt, alpha=0.3) + 
+  geom_point(aes(x=x,y=y,col=cluster), data=centers, shape="star") +
+  xlab("") + ylab("") +
+  NULL
+```
