@@ -1,0 +1,413 @@
+
+```{r}
+get_ci = function(s, confidence = 0.95, pop_mean) {
+  smpl_mean = mean(s)
+  smpl_var = var(s)
+  sd_error = sqrt(smpl_var / length(s))
+  alpha = 1 - confidence
+  u_bound = sd_error * qnorm(1 - alpha / 2) + smpl_mean
+  l_bound = sd_error * qnorm(alpha / 2) + smpl_mean
+  includes_mean = pop_mean >= l_bound && pop_mean <= u_bound
+  c(l_bound, u_bound, includes_mean, sd_error)
+}
+
+get_ci_alternative = function(s, confidence = 0.95, pop_mean) {
+  n = length(s)
+  alpha = sum(s) + 10
+  beta = n - sum(s) + 10
+
+  type2 = 1 - confidence
+  u_bound = qbeta(1-type2/2, alpha, beta)
+  l_bound = qbeta(type2/2, alpha, beta)
+
+  includes_mean = pop_mean >= l_bound && pop_mean <= u_bound
+  c(l_bound, u_bound, includes_mean)
+}
+
+
+#Prior: Beta(1, 1)
+#Posterior: Beta(1 + successes, 1 + failures)
+
+get_ci_alternative_hdi = function(s, confidence = 0.95, pop_mean) {
+  n = length(s)
+  alpha = sum(s) + 1
+  beta = n - alpha + 9
+
+  o = hdi(rbeta(10000, alpha, beta), credMass=confidence)
+  l_bound = o['lower']
+  u_bound = o['upper']
+
+  includes_mean = pop_mean >= l_bound && pop_mean <= u_bound
+  c(l_bound, u_bound, includes_mean)
+}
+```
+
+
+```{r}
+generate_incl_prop_beta = function(sample_size){
+  res = sapply(1:1000, function(i) {
+    r = get_ci_alternative(rbinom(sample_size, 1, 1/9), pop_mean = 1/9)
+    r[3]
+  })
+  return(mean(res))
+}
+
+generate_incl_prop_normal_appr = function(sample_size){
+  res = sapply(1:1000, function(i) {
+    r = get_ci(rbinom(sample_size, 1, 1/9), pop_mean = 1/9)
+    r[3]
+  })
+  return(mean(res))
+}
+
+size_vec = 1:100
+plot(size_vec, sapply(size_vec, generate_incl_prop_beta), type="l", ylim=c(0,1))
+lines(size_vec, sapply(size_vec, generate_incl_prop_normal_appr), col="hotpink")
+abline(h=0.95, lty=2)
+
+```
+
+
+```{r, fig.height=2, fig.width=5}
+set.seed(42)
+sample_size = 1000
+pop_mean = 8
+one_sample = rpois(sample_size, pop_mean)
+sample_mean = mean(one_sample)
+bounds = get_ci(one_sample, confidence = 0.95, pop_mean = pop_mean)
+
+draw_ci = function (df) {
+  ggplot(df) +
+    geom_errorbarh(aes(xmin=lbound, xmax=ubound, y=y, col=includes_pop_bounds)) +
+    geom_point(aes(y=y,x=sample_mean), size=3, color='red') + 
+    xlab("") + 
+    ylab("") + theme_bw() +
+    theme(
+      axis.ticks.y = element_blank(), 
+      axis.text.y = element_blank(), 
+      plot.title = element_text(hjust = 0.5),
+      legend.position = 'none'
+    )
+}
+
+p1 = tibble_row(
+  lbound=bounds[1], 
+  ubound=bounds[2], 
+  mean=sample_mean, 
+  y=0,
+  includes_pop_bounds=1
+) %>% draw_ci() + 
+  xlim(7.6, 8.25) + ylim(-2, 2) +
+  ggtitle("Just a simple 95% confidence interval of a population mean based on a single sample")
+
+ggsave("single_conf_interval.png", p1, width=500, height=200, units='px')
+p1
+
+```
+
+```{r, fig.height=8, fig.width=4}
+
+set.seed(42)
+sample_size = 100000
+cis = lapply(1:100, function(i) {
+  smpl = rpois(sample_size, pop_mean)
+  smpl_mean = mean(smpl)
+  bounds = get_ci(smpl, confidence = 0.95, pop_mean = pop_mean)
+  c(y=i, 
+    sample_mean=smpl_mean, 
+    lbound=bounds[1], 
+    ubound=bounds[2], 
+    includes_pop_bounds=bounds[3],
+    sd_error = bounds[4]
+  )
+})
+
+samples100 = do.call(bind_rows, cis)
+
+p2 = samples100 %>% draw_ci() +
+  geom_vline(xintercept=pop_mean, color='red', linetype='dashed') +
+  ggtitle("Realizations of a 95% confidence interval of a population mean from 100 samples")
+
+ggsave("100_realizations.png", p2, width = 500, height=1000, units='px', dpi=72)
+p2
+
+```
+
+
+
+```{r}
+
+
+p3_base = samples100 %>% slice(1,1) %>% draw_ci()
+
+
+row = samples100 %>% slice(1,0)
+
+densities = lapply(seq(row[['lbound']],row[['ubound']],0.001), function(i) {
+  c(x=i, y= dnorm(i, mean=row[['sample_mean']], sd=row[['sd_error']]))
+})
+
+d_tibble = do.call(bind_rows, densities)
+
+
+p3 = p3_base + 
+  geom_ribbon(
+    aes(x=x, ymax=row[['y']] + y*0.05), 
+    data=d_tibble, 
+    alpha=0.2, 
+    fill='red', 
+    ymin=row[['y']]
+  ) +
+  #ylab('"Likelihood" of observing the population parameter') + 
+  #ggtitle("How I (used to) think of confidence intervals") + 
+  geom_curve(
+  aes(x = 8.02, y = 2, xend = 8.01, yend = 1.8),
+  arrow = arrow(
+    length = unit(0.03, "npc"), 
+    type="closed" 
+    ),
+  colour = "red",
+  size = 0.8,
+  angle = 30 # Anything other than 90 or 0 can look unusual
+) +
+  annotate(
+    "text", 
+    x=8.02, 
+    y=1.85, 
+    label='overall probability to observe \n population parameter = 0.95', 
+    size=4
+  ) +
+  geom_curve(
+    aes(x = 7.99, y = 3, xend = 8.00, yend = 3.2),
+    arrow = arrow(
+    length = unit(0.03, "npc"), 
+    type="closed" 
+    ),
+    colour = "red",
+    size = 0.8,
+    angle = 30 # Anything other than 90 or 0 can look unusual
+  ) +
+  annotate(
+    "text", 
+    x=7.99, 
+    y=3.18, 
+    label='high(er) likelihood \n of population parameter', 
+    size=4
+  ) +
+  geom_curve(
+    aes(x = 7.98, y = 1.6, xend = 7.985, yend = 1.45),
+    arrow = arrow(
+    length = unit(0.03, "npc"), 
+    type="closed" 
+    ),
+    colour = "red",
+    size = 0.8,
+    angle = 30 # Anything other than 90 or 0 can look unusual
+  ) +
+  annotate(
+    "text", 
+    x=7.98, 
+    y=1.75, 
+    label='low(er) likelihood \n of population parameter', 
+    size=4
+  ) +
+  xlim(7.975, 8.025)
+
+
+ggsave("wrong-way-to-think-about-ci.png", p3, width = 2000, height=1000, units='px', dpi=200)
+p3
+
+```
+
+```{r}
+
+qnts = tibble(
+  qnts = qnorm(seq(0,1, 0.025), mean=row[['sample_mean']], sd=row[['sd_error']])
+)
+
+
+p4 = p3_base + geom_ribbon(
+    aes(x=x, ymax=row[['y']] + y*0.05), 
+    data=d_tibble, 
+    alpha=0.2, 
+    fill='red', 
+    ymin=row[['y']]
+  ) +
+  geom_point(aes(x=qnts), data=qnts, y=row[['y']]) +
+  geom_curve(
+    aes(x = 7.99, y = 0.7, xend = 7.995, yend = 0.98),
+    arrow = arrow(
+    length = unit(0.03, "npc"), 
+    type="closed" 
+    ),
+    colour = "red",
+    size = 0.8,
+    angle = 60 # Anything other than 90 or 0 can look unusual
+  ) +
+  annotate(
+    "text", 
+    x=7.99, 
+    y=0.85, 
+    label='Position \n of quantiles', 
+    size=4
+  ) 
+
+ggsave("quantile-positions.png", p4, width = 2000, height=1000, units='px', dpi=200)
+p4
+```
+
+
+
+```{r, fig.height=20}
+
+smp_size = 1000 #sample size
+pop_mean = 8 #population mean
+alpha = 0.05 #significance level for CI's
+set.seed(42)
+
+samples = lapply(1:10000, function(i) {
+  smpl = rpois(smp_size, pop_mean) #draw from Poisson distribution
+  smpl_mean = mean(smpl) #compute sample mean
+  smpl_var = var(smpl) #compute sample variance
+  sd_error = sqrt(smpl_var / smp_size) #compute st. error of sampling distribution
+  u_bound = sd_error * qnorm(1 - alpha / 2) + smpl_mean #get CI lower bound
+  l_bound = sd_error * qnorm(alpha / 2) + smpl_mean #get CI upper bound
+  W1 = (pop_mean - l_bound) / (u_bound - l_bound) #first distance definition
+  W2 = pnorm(pop_mean, mean = smpl_mean, sd = sd_error) #second distance definition
+  
+  #some additional metrics
+  
+  #p-value of observing the sample mean greater than population mean
+  pval = t.test(smpl, mu=pop_mean, alternative="greater")$p.value 
+  #p-value of observing the sample mean greater than population mean + 0.1
+  pval1 = t.test(smpl, mu=pop_mean + 0.1, alternative="greater")$p.value
+  #p-value of observing the sample mean greater than population mean - 0.1
+  pval2 = t.test(smpl, mu=pop_mean - 0.1, alternative="greater")$p.value
+  
+  #densities drawn from sampling distribution for plotting purposes
+  x_range = seq(smpl_mean - 4, smpl_mean + 4, 0.01)
+  densities = dnorm(x_range, mean = smpl_mean, sd = sd_error)
+  
+  tibble(
+    i = i, 
+    x = x_range, 
+    densities = densities,
+    mean = smpl_mean,
+    W1 = W1,
+    W2 = W2,
+    dist_in_means = pop_mean - smpl_mean,
+    pval = pval,
+    pval1 = pval1,
+    pval2 = pval2,
+  )
+})
+
+df = bind_rows(samples)
+
+p5 = df %>% 
+  filter(i < 20) %>% 
+  mutate(i = as.factor(i)) %>% #filter(x > 8 & x < 9) %>% 
+  ggplot(aes(x=x, y=i, height=densities)) + geom_density_ridges(stat='identity') +
+  xlim(7,9) + geom_vline(xintercept = 8, color='red', size=1, linetype='dashed')
+  
+
+ggsave("ridge-plots.png", p5, width = 2000, height=1000, units='px', dpi=100)
+```
+
+
+```{r}
+summaries = df %>% dplyr::select(-densities, -x) %>% group_by(i) %>%
+  summarize_all(first)
+
+p6 = summaries %>% 
+  ggplot(aes(x=dist_in_means)) + 
+  geom_histogram(aes(y = ..density..), binwidth=0.005) +
+  geom_density(color="red") +
+  theme_bw() + 
+  xlab("Sample mean - Population mean") +
+  ylab("") +
+  ggtitle("Distribution of distance between sample mean and population mean")
+
+
+p6
+
+ggsave("mean-to-pop-mean.png", p6, width = 1000, height=500, units='px', dpi=100)
+
+```
+
+```{r}
+p7 = summaries %>% 
+  ggplot(aes(x=W1)) + 
+  geom_histogram(aes(y = ..density..), binwidth=0.05) +
+  geom_density(color="red") +
+  theme_bw() + 
+  xlab("W1") +
+  ylab("") +
+  ggtitle("Distribution of W1 distance metric")
+
+
+p7
+
+ggsave("W1-dist.png", p7, width = 1000, height=500, units='px', dpi=100)
+```
+
+
+```{r}
+p8 = summaries %>% 
+  ggplot(aes(x=W2)) + 
+  geom_histogram(aes(y = ..density..), binwidth=0.01) +
+  #geom_density(color="red") +
+  theme_bw() + 
+  xlab("W2") +
+  ylab("") +
+  ggtitle("Distribution of W2 distance metric")
+
+
+p8
+
+ggsave("W2-dist.png", p8, width = 1000, height=500, units='px', dpi=100)
+```
+
+
+```{r}
+
+in_b = sapply(1:100, function(i) {
+  smp_size = 100
+  #smpl = sample(population, smp_size, replace = T)
+  smpl = rpois(smp_size, pop_mean)
+  smpl_mean = mean(smpl)
+  smpl_var = var(smpl)
+  sd_error = sqrt(smpl_var / smp_size)
+  #sd_error = sqrt(true_population_var / smp_size)
+  u_bound = sd_error * qnorm(0.995) + smpl_mean
+  l_bound = sd_error * qnorm(0.005) + smpl_mean
+  is_in_bounds = (pop_mean >= l_bound) && (pop_mean <= u_bound)
+  if (is_in_bounds) {
+    q_true = pnorm(pop_mean, smpl_mean, sd_error)  
+  } else {
+    q_true = NA
+  }
+  
+  smpl_mean
+  #(smpl_mean - pop_mean) / sd_error
+  #l_bound
+})
+
+in_b %>% hist()
+
+
+```
+```{r}
+tibble(y=pnorm(seq(-5,5,0.01)), x=seq(-5,5,0.01)) %>% 
+  ggplot() + geom_line(aes(x=x,y=y))
+```
+
+```{r}
+population = rpois(10000, pop_mean)
+population_mean = mean(population)
+population_square_mean = mean(population^2)
+true_population_var = population_square_mean - (population_mean)^2
+```
+
+
+
