@@ -1,0 +1,119 @@
+---
+title: "Heterogenous effects"
+output: github_document
+---
+
+
+
+```{r}
+no_users = 10000
+baseline_rate = c(0.42, 0.46)
+certainty = 1
+weights = c(0.5, 0.5)
+
+
+draw_users = function(no_users, baseline_rate, certainty, weights=1) {
+  if (sum(weights) != 1) stop("Mixture weights do not add up to 1")
+  if ((length(weights) > 1) && length(weights) != length(baseline_rate)) {
+    stop("Unequal number of baseline rates & weights provided")
+  }
+  num_mixtures = length(baseline_rate)
+  if (length(baseline_rate) > 1 && length(weights) == 1) {
+    weights = rep(1 / num_mixtures, num_mixtures)
+  }
+  users_per_mixture = no_users * weights
+  names(baseline_rate) = baseline_rate
+  
+  mapply(function(br, usr) {
+    rbeta(
+      n = usr, 
+      shape1 = br * (10 ** certainty), 
+      shape2 = (1 - br) * (10 ** certainty)
+    )
+  }, baseline_rate, users_per_mixture, SIMPLIFY = T)
+}
+
+dts = lapply(c(0.1, 0.5, 1, 1.5, 2), function(certainty) {
+  draws = draw_users(no_users = 10000, baseline_rate = 0.42, certainty = certainty) |> 
+    c() |>
+    as_tibble_col() |> mutate(certainty = certainty)
+
+})
+
+do.call(bind_rows, dts) |> mutate(certainty = as.factor(certainty)) |> 
+  ggplot() + 
+  geom_density(aes(x=value, color=certainty, group=certainty))
+
+```
+```{r}
+dts = lapply(list(c(0.22, 0.62), c(0.10, 0.42, 0.74)), function(br) {
+  draws = draw_users(no_users = 10000, baseline_rate = br, certainty = 1)
+  colnames(draws) = br
+  draws |> as_tibble() |> pivot_longer(everything(), names_to = "mixture") |>
+  mutate(baselines = paste(br, collapse='-'))
+
+})
+
+do.call(bind_rows, dts) |> mutate(baselines = as.factor(baselines)) |> 
+  ggplot() + 
+  geom_density(aes(x=value, color=baselines, group=baselines))
+
+do.call(bind_rows, dts) |> group_by(baselines) |> summarize(m = mean(value))
+```
+```{r}
+total_users = 10000
+
+
+A = draw_users(no_users = total_users, baseline_rate = 0.42, certainty = 1) |>
+  as_tibble_col() |> mutate(baseline = 0.42, population = 'A')
+
+B = draw_users(no_users = total_users, baseline_rate = 0.42, certainty = 0.2) |>
+  as_tibble_col() |> mutate(baseline = 0.42, population = 'B')
+
+C = draw_users(no_users = total_users, baseline_rate = c(0.22, 0.62), certainty = 1)
+colnames(C) = c(0.22, 0.62) 
+C = as_tibble(C) |> pivot_longer(everything(), names_to = "baseline") |>
+  mutate(population = 'C', baseline = as.numeric(baseline))
+
+D = draw_users(
+  no_users = total_users, 
+  baseline_rate = c(0.1, 0.3, 0.76), 
+  certainty = 1.5,
+  weights = c(0.2, 0.45, 0.35)
+)
+mapped_D = mapply(function(d, n) as_tibble_col(d) |> mutate(baseline = n), D, names(D), SIMPLIFY = F) 
+D = do.call(bind_rows, mapped_D)|> mutate(population = 'D', baseline = as.numeric(baseline))
+
+all_pops = bind_rows(A,B,C,D)
+
+means = all_pops |> group_by(population) |> summarize(m = mean(value))
+
+ggplot(all_pops) + 
+  geom_density(aes(x=value, color=population, group=population, fill=population), alpha=0.3) +
+  facet_wrap(~population, nrow=1) +
+  geom_label(aes(label=paste("Mean:", round(m, 2))), x=0.42, y=0.5, data=means)
+
+```
+```{r}
+MDE = 0.03
+power.prop.test(p1=0.42, p2=0.42 + MDE, n=5000)
+
+```
+```{r}
+results_fp = sapply(1:10000, function(i) {
+  assignments = sample(1:2, 10000, replace=T)
+  control = B$value[which(assignments == 1)]
+  test = B$value[which(assignments == 2)]
+  
+  outcomes_control = rbinom(1:length(control), 1, control)
+  outcomes_test = rbinom(1:length(test), 1, pmin(test + MDE, 1))
+  
+  t.test(outcomes_control, outcomes_test)$p.value
+  
+})
+
+mean(results_fp < 0.05)
+
+
+```
+
