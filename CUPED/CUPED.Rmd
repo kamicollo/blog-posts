@@ -1,0 +1,157 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(pbapply)
+```
+
+
+```{r}
+base_rate = 0.2
+
+chance_of_making_BAT = 0.07 * 0.07
+chance_of_losing_BAT = 1 -  0.8 * 0.8
+total_users = 50000
+test_control_ratio = 0.5
+
+
+
+
+simulate_outcomes = function(users, conv_rate, loss_rate) {
+  users |> 
+  mutate(would_improve = rbinom(nrow(test_users), 1, conv_rate)) |>
+  mutate(would_lose = rbinom(nrow(test_users), 1, loss_rate)) |>
+  mutate(final_state = 
+           (start_state - would_lose*start_state) + 
+           (would_improve - start_state) * (1 - start_state)
+  )
+}
+
+cuped_mean = function(df) {
+  mean(df$final_state) - (cov(x=df$start_state,y=df$final_state)/var(df$start_state)) * mean(df$start_state)
+}
+
+cuped_var = function(df) {
+  var(df$final_state) * (1 - cor(df$start_state, df$final_state)**2)
+}
+
+
+run_sim = function(loss_impact=0, conv_impact=0, iters=1000) {
+  
+  pbsapply(1:iters, function(i) {
+  
+    users = rbinom(total_users, 1, base_rate)
+    test_assignments = sample(1:total_users, total_users * test_control_ratio, replace=FALSE)
+    test_users = as_tibble_col(users[test_assignments], column_name = "start_state")
+    control_users = as_tibble_col(users[-test_assignments], column_name = "start_state")
+  
+  
+    test_outcomes = simulate_outcomes(
+      test_users, chance_of_making_BAT + conv_impact, chance_of_losing_BAT + loss_impact
+    )
+  
+    control_outcomes = simulate_outcomes(
+      control_users, chance_of_making_BAT, chance_of_losing_BAT
+    )
+    
+    j_dt = bind_rows(
+      test_outcomes |> mutate(treatment = 1),
+      control_outcomes |> mutate(treatment = 0)
+    )
+    
+    mean_diff = cuped_mean(test_outcomes) - cuped_mean(control_outcomes)
+    
+
+    c(
+      t_test = unname(t.test(test_outcomes$final_state, control_outcomes$final_state)[['statistic']]),
+      diff_test = unname(t.test(
+        test_outcomes$final_state - test_outcomes$start_state,
+        control_outcomes$final_state - test_outcomes$start_state
+      )[['statistic']]),
+      ancova=tidy(lm(final_state ~ treatment + start_state, j_dt))[[2, 'statistic']],
+      cuped=cuped2(j_dt),
+      corr_test = cor(test_outcomes$start_state, test_outcomes$final_state),
+      corr_control = cor(control_outcomes$start_state, control_outcomes$final_state),
+      mean_diff = mean(test_outcomes$final_state) - mean(control_outcomes$final_state)
+    )
+      
+  }, cl=4)
+}
+```
+
+
+```{r}
+res_null = t(run_sim(iters=1000)) |> as_tibble() 
+
+res_null |> 
+  pivot_longer(everything(), names_to = "test", values_to = "value") |>
+  group_by(test) |>
+  summarize(`FP error rate` = mean(abs(value) > qnorm(0.975)))
+```
+
+```{r}
+res_conv = t(run_sim(iters=1000, conv_impact = 0.01)) |> as_tibble() 
+
+res_conv |> 
+  pivot_longer(everything(), names_to = "test", values_to = "value") |>
+  group_by(test) |>
+  summarize(
+    `Power` = mean(value > qnorm(0.975)),
+    `Wrong` = mean(value < -qnorm(0.975)),
+    `not detected` = mean(abs(value) < qnorm(0.975)),
+    avg = mean(value)
+  )
+```
+```{r}
+res_loss = t(run_sim(iters=1000, loss_impact = -0.02)) |> as_tibble() 
+
+res_loss |> 
+  pivot_longer(everything(), names_to = "test", values_to = "value") |>
+  group_by(test) |>
+  summarize(
+    `Power` = mean(value > qnorm(0.975)),
+    `Wrong` = mean(value < -qnorm(0.975)),
+    `not detected` = mean(abs(value) < qnorm(0.975)),
+    avg = mean(value)
+  )
+```
+
+
+```{r}
+cuped = function(all) {
+  
+  theta = cov(all$start_state, all$final_state) / var(all$start_state)
+  all = all |> mutate(y_cuped = final_state - theta * (start_state - mean(start_state)))
+  tidy(lm(y_cuped ~ treatment, data=all))[[2, 'statistic']]
+  
+}
+
+cuped2 = function(all) {
+  
+  theta = tidy(lm(final_state ~ start_state, data=all))[[2, 'estimate']]
+  all = all |> mutate(y_cuped = final_state - theta * (start_state - mean(start_state)))
+  tidy(lm(y_cuped ~ treatment, data=all))[[2, 'statistic']]
+  
+}
+
+cuped3 = function(){
+  pooled_var = (
+      nrow(test_outcomes) * cuped_var(test_outcomes) + 
+      cuped_var(control_outcomes) * nrow(control_outcomes)
+      ) / (nrow(test_outcomes) + nrow(control_outcomes))
+
+    cuped_stat = mean_diff / sqrt(pooled_var / (nrow(control_outcomes) + nrow(test_outcomes)))
+}
+
+all = bind_rows(test_outcomes |> mutate(treatment = 1), 
+                control_outcomes |> mutate(treatment = 0)
+              )
+
+cuped(all)
+cuped2(all)
+```
+
