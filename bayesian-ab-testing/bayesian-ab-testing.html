@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.3.450">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Can we stop bashing Bayesian A/B testing methods, please?</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="bayesian-ab-testing_files/libs/clipboard/clipboard.min.js"></script>
+<script src="bayesian-ab-testing_files/libs/quarto-html/quarto.js"></script>
+<script src="bayesian-ab-testing_files/libs/quarto-html/popper.min.js"></script>
+<script src="bayesian-ab-testing_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="bayesian-ab-testing_files/libs/quarto-html/anchor.min.js"></script>
+<link href="bayesian-ab-testing_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="bayesian-ab-testing_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="bayesian-ab-testing_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="bayesian-ab-testing_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="bayesian-ab-testing_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+
+<script src="bayesian-ab-testing_files/libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="bayesian-ab-testing_files/libs/lightable-0.0.1/lightable.css" rel="stylesheet">
+
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+</head>
+
+<body class="fullcontent">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Can we stop bashing Bayesian A/B testing methods, please?</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+</header>
+
+<p>Bayesian vs.&nbsp;frequentist—“the never-ending debate”—is boring. It’s just math, after all. (Okay, there is also a fundamental disagreement on the definition of probability.) The answer to that debate is simple: an experienced data scientist/statistician should be able to use the tools from either domain, depending on the problem.</p>
+<p>I spend a lot of time on online experiments. At <a href="https://www.weightwatchers.com/us/">WW</a>, we have an in-house experimentation platform and so we don’t we rely on any of the vendors the space, but I find it helpful to keep up with the content produced by them. Lately, I’ve come across some gems.</p>
+<p>Here’s an opening paragraph from the Optimizely blog post with a telling URL <a href="https://www.optimizely.com/insights/blog/why-you-should-choose-sequential-testing-and-not-bayesian/">https://www.optimizely.com/insights/blog/<strong>why-you-should-choose-sequential-testing-and-not-bayesian/</strong></a>:</p>
+<blockquote class="blockquote">
+<p>Full Bayesian methods are about as useful for large-scale online experiments as a chemical dumpster fire. Bayesian methods offer a probability-based perspective, integrating prior knowledge and current data. If you make the wrong choice, like poorly selecting in the critical first step which statistical distribution you should set as your prior, your online experiment is going to be as slow as molasses.</p>
+</blockquote>
+<p><strong>Chemical dumpster fire</strong>? OK..</p>
+<p>Eppo (whose content I usually very much enjoy!) recently <a href="#0">published “Comparing Frequentist vs.&nbsp;Bayesian vs.&nbsp;Sequential Approaches to A/B Testing</a>, ” comparing various a/b testing methods. Overall, it’s a good read, but when it comes to Bayesian analysis assessment, it includes statements such as</p>
+<blockquote class="blockquote">
+<p><strong>Cons of Bayesian tests</strong></p>
+<p>Statistical guarantees are not as clearly defined and strongly depend on the appropriateness of the prior. […]</p>
+<p><strong>When to use Bayesian tests:</strong></p>
+</blockquote>
+<blockquote class="blockquote">
+<p>Whether to use a frequentist or Bayesian approach often boils down to preference, but here are some other subjective reasons:</p>
+</blockquote>
+<blockquote class="blockquote">
+<p>[…] If you prefer having the ease of explaining results over the rigor of strong statistical guarantees.</p>
+</blockquote>
+<p>After reading this, would any self-respective scientist or experimentation lead consider methods that do not provide strong statistical guarantees?</p>
+<p>Finally, Ron Kohavi shared a <a href="https://www.linkedin.com/posts/ronnyk_draft-note-p-values-and-bayes-factors-in-activity-7170716579750432769-UyNu">note on LinkedIn</a> in which he compares p-values to Bayes factors and points out that online Bayes calculators seem overly optimistic. The note and the thread are worth skimming through, but the overall conclusion also seems to lean towards “nope, Bayesian methods are not worth it.”</p>
+<p>I don’t believe that it’s a fair assessment. Or, as XKCD put it:</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://imgs.xkcd.com/comics/duty_calls.png" class="img-fluid figure-img"></p>
+</figure>
+</div>
+<p>Let’s dive in.</p>
+<section id="theres-no-such-thing-as-bayesian-analysis-for-ab-testing" class="level2">
+<h2 class="anchored" data-anchor-id="theres-no-such-thing-as-bayesian-analysis-for-ab-testing">There’s no such thing as “Bayesian analysis” for A/B testing</h2>
+<p>First, let’s establish that there’s no single “Bayesian analysis.” This is the biggest gripe I have with Eppo’s post above. Comparing a frequentist group sequential test to “Bayesian analysis” is the same as comparing it to “machine learning.” Bayesian methods are a class of statistical methods; there’s no such thing as one “Bayesian approach.”</p>
+<p>As a matter of fact, there’s such a thing as <a href="https://www.intechopen.com/chapters/85094">Bayesian Group Sequential Design</a>. Surely, that would be a more appropriate comparison to a frequentist group sequential designs?</p>
+<p>The Optimizely post that bashes Bayesian methods? It touts their “Stats Engine” and sequential procedure for always valid p-values derived from mixture sequential probability ratio tests (mSPRTs). Ironically, mSPRT relies on Bayesian statistics itself - it’s <a href="https://arxiv.org/abs/1512.04922">a procedure</a> based on calculating likelihood ratios that requires choosing a “mixing distribution”. That mixing distribution happens to be nothing else but a Bayesian prior distribution!</p>
+<p>We should be precise when we talk Bayesian methods for A/B testing. To my knowledge, the most popular approaches are:</p>
+<ul>
+<li><p>Estimating posterior probability distributions of a treatment effect is the most “straightforward” Bayesian application to experiments. This procedure aims to quantify a simple estimand: “What is the probability that treatment is larger than 0?”</p></li>
+<li><p>Some prefer quantifying a slightly different estimand: “What is the probability that A is better than B?”. This is often called “chance to beat” and differs from the abovementioned estimand when there is more than a single treatment.</p></li>
+<li><p>The Optimizely post implicitly refers to an estimand popularized by <a href="https://vwo.com/downloads/VWO_SmartStats_technical_whitepaper.pdf">Chris Stucchio at VWO</a>: expected loss. This estimand combines Bayesian statistics and decision theory to quantify the cost of making a wrong decision and introduces decision rules minimize the expected loss in the long term.</p></li>
+<li><p>Finally, some approaches use Bayes factors to derive estimands comparable to null hypothesis testing in the frequentist world and the ROPE (region of practical equivalence) procedure popularized by <a href="https://journals.sagepub.com/doi/abs/10.1177/1745691611406925">John Kruschke</a>, which focuses on estimating the probability that the treatment effect falls within a predefined range of small values (values that we consider “practically equivalent” to zero effect). The latter is largely equivalent to “non-inferiority” testing procedures in frequentist paradigm.</p></li>
+</ul>
+<p>All of the above are, effectively, different decision metrics. In frequentist approaches, you really have just one, as long as you stay in the null hypothesis testing realm (p-value/confidence intervals—which are just mirrors of each other). Then, on top, one can layer other things—so yes, you can have a Bayesian group sequential test or a Bayesian CUPED, or <a href="https://juanitorduz.github.io/iv_pymc/">Bayesian IV model for useful in non-compliance scenarios</a>, just like you can have them using frequentist approaches.</p>
+<p>The fact that you can easily derive different decision metrics is one of the reasons I like Bayesian methods. It’s possible to get equivalents with frequentist methods, but it’s not <strong><em>easy.</em></strong> You can implement a Bayesian expected loss calculation with a few lines of code in a package like pyMC. In frequentist world - you probably need a statistics PhD and lots of painful derivations.</p>
+<p>But I digress. The point is that if you want to compare Bayesian methods, you have to pick a method. You can’t just hand-wave and talk about “Bayesian analysis” and scaremonger everyone about how it’s all about the choice of priors and the subjectivity that results from it.</p>
+<p>Coincidentally, that’s exactly what I want to go into detail next.</p>
+</section>
+<section id="is-it-all-about-priors" class="level2">
+<h2 class="anchored" data-anchor-id="is-it-all-about-priors">Is it all about priors?</h2>
+<p>Priors. They are guaranteed to be the first factor mentioned in any comparison of Bayesian and frequentist A/B testing methodologies. Quoting Optimizely:</p>
+<blockquote class="blockquote">
+<p>Bayesian experiments are all about combining two sources of information: what you thought about the situation before you observed the data at hand, and the other is what the data themselves have to say about the situation.&nbsp; &nbsp;</p>
+<p>The first source is expressed as a prior probability distribution. Prior means what you understood before you observed the data. The second source is expressed through the likelihood. The same likelihood is used in fixed-horizon, frequentist statistics.</p>
+<p>Therefore, an experimenter starting with a good guess can reach a decision much faster compared to an experimenter using a frequentist method. However, if that initial guess was poorly chosen then the test can either take an extremely long time or yield very high error rates.</p>
+</blockquote>
+<p>Or Eppo:</p>
+<blockquote class="blockquote">
+<p>While all the above methods are frequentist in nature, Bayesian hypothesis testing involves forming a prior belief and then updating it with data to create a posterior. This approach can be difficult to compare with frequentist methods, as the underlying philosophy is quite different.</p>
+</blockquote>
+<p>I won’t deny that Bayesian methods require setting priors—that would be stupid. However, the ability to use informative priors is just one of the key reasons for considering Bayesian methods. Somehow, the others are often forgotten in such comparisons.</p>
+<p>First, it’s the ability to choose a different decision criterion. Have you ever felt the pain of explaining a business stakeholder what exactly a p-value is? Wrestled with questions like “Why is the experiment result statistically significant when its point estimate is smaller than the MDE we used when calculating the required sample?” Perhaps you concluded that <a href="https://aurimas.eu/blog/2023/02/getting-faster-to-decisions-in-a-b-tests-part-2-misinterpretations-and-practical-challenges-of-classical-hypothesis-testing/">NHST is a very unintuitive decision-making framework</a>? I covered the most popular decision metrics above - and I would argue that each of them is more intuitive than using NHST.</p>
+<p>Choosing a decision criterion becomes less about statistical shenanigans and more about quantifying risk. Any product manager will understand a statement: “There’s a 78% chance that A is better than B”. It’s very likely that, over time, they will ask - “hey, how come we only measure if A is better than B but do not take into account how much it’s better? Shouldn’t we do that?” And suddenly you’ll find yourself reaching for expected loss metrics - there’s a natural “progression” that you can apply as the organization matures.</p>
+<p>Another beauty of Bayesian methods is uncertainty propagation enabled by the fact that all these procedures rely on posterior distributions.</p>
+<p>Why is that helpful? Suppose you run a test on a pricing test on the website for a business operating a subscription model; you may want to evaluate the test not only based on conversion rates but also on expected cLTV (customer lifetime value). The trouble is, however, that cLTVs are estimates, and you may have different levels of confidence in the cLTVs at various pricing points. You have outputs from your machine learning model that quantify those uncertainties. For example, you may have 1000’s of customers who signed up for plans at $10/month for 3 months, and the cLTV estimates are very tight (95% confidence intervals are narrow), as you know exactly how customers retain after the third month. But what about a new plan at $5/month for 12 months that you never tried before? Your ML model will likely have much more uncertainty in the estimates (or at least it should!)</p>
+<p>How do you incorporate the varying levels of uncertainty in the test? It’s undoubtedly possible with both frequentist and Bayesian approaches. However, a frequentist approach will <em>(surprise!)</em> require PhD-level derivations. The Bayesian version can be relatively quickly coded in your favorite package, e.g., pyMC.</p>
+<p>Finally, Bayesian approaches easily lend themselves to hierarchical models, which enable pooling information across units and effectively apply shrinkage to your estimates, reducing the risk of false positives (to be fair, hierarchical models can be estimated using frequentist tools, too). Apple’s data science team recently published a paper on how they leverage hierarchical Bayesian models to run A/B tests showing how these approaches stack up against others, including mSPRT.</p>
+<p>Yes, to do all that, you’ll need to set priors. But it’s not dark magic! If you run frequentist tests, you need assumptions, too. The argument that “if you set wrong priors, then…” is somewhat equivalent to saying, “if you choose a bad MDE when estimating required sample size, then…”. These are different assumptions, but they are still assumptions.</p>
+<p>Besides, you can get quite far with uninformative priors.</p>
+</section>
+<section id="what-if-you-use-uninformative-priors" class="level2">
+<h2 class="anchored" data-anchor-id="what-if-you-use-uninformative-priors">What if you use uninformative priors?</h2>
+<p>Most articles on using Bayesian A/B testing will tell you that using uninformative priors is not a very good idea. I think that’s true - not using domain knowledge seems wasteful. However, I want to show that, as the very “toe dip in the water”, using them won’t result in a “chemical dumpster fire” as Optimizely would lead us to believe, nor we will have lots of issues with “statistical guarantees”. Also - fun fact - the Apple’s paper I linked above implies they use uninformative priors (<span class="math inline">\(\beta \sim N(0, 100)\)</span>). So perhaps it’s not such a bad idea.</p>
+<p>You probably have heard that using uninformative/flat priors gets you results similar to frequentist ones. This claim, in general, is not exactly true (see, e.g.&nbsp;<a href="https://projecteuclid.org/ebooks/institute-of-mathematical-statistics-lecture-notes-monograph-series/Mathematical-statistics-and-applications/chapter/Some-aspects-of-matching-priors/10.1214/lnms/1215091929.pdf">Reid &amp; Mukerjee, 2003</a> or, if you prefer entertaining reads, then <a href="https://dansblog.netlify.app/posts/2021-10-15-priors3/priors3">Priors: Fire with Fire by Dan Simpson</a>).</p>
+<p>However, <em>in the context of A/B testing,</em> where we are in a straightforward univariate setting, it is very much true. Let me show you.</p>
+<section id="the-gaussian-case" class="level3">
+<h3 class="anchored" data-anchor-id="the-gaussian-case">The Gaussian case</h3>
+<p>Let’s consider the following setup:</p>
+<ul>
+<li><p>We’re interested in measuring the impact of a simple A/B test.</p></li>
+<li><p>Our outcome metric happens to be normally distributed: <span class="math inline">\(Y_A \sim N(\mu_A, \sigma_A)\)</span> and <span class="math inline">\(Y_B \sim N(\mu_B, \sigma_B)\)</span>. For simplicity, we will set <span class="math inline">\(\mu_a = 0, \sigma_A, \sigma_B = 1, \text { and } \mu_B = 0.05\)</span>.</p></li>
+</ul>
+<p>Suppose we ran an experiment and collected 6,000 samples in each experiment arm (that’s 78% power, assuming we set MDE equal to the true unobservable population effect).</p>
+<section id="a-quick-t-test-refresher" class="level4">
+<h4 class="anchored" data-anchor-id="a-quick-t-test-refresher">A quick t-test refresher</h4>
+<p>If we were to evaluate our results using a t-test, we would:</p>
+<ul>
+<li><p>Compute sample means: <span class="math inline">\(\bar{Y_A} = \text{mean}(Y_A)\)</span>, <span class="math inline">\(\bar{Y_B} = \text{mean}(Y_B)\)</span></p></li>
+<li><p>Compute sample variances: <span class="math inline">\(s_A^2\ =\text{var}(Y_A)\)</span>, <span class="math inline">\(s_B^2\ =\text{var}(Y_B)\)</span></p></li>
+</ul>
+<p>Then, enabled by CLT, we can claim that the difference of the means between the two groups is normally distributed (that distribution is referred to as the “sampling distribution”), with the following parameters:</p>
+<ul>
+<li><p>Mean: <span class="math inline">\(\bar{Z} = \bar{Y_A} - \bar{Y_B}\)</span></p></li>
+<li><p>Standard error: <span class="math inline">\(s_Z = \sqrt{\frac{s_A^2}{n_A} + \frac{s_B^2}{n_B}}\)</span></p></li>
+</ul>
+<p>Finally, we calculate the test statistic <span class="math inline">\(t = \bar{Z} / s_Z\)</span>, and look up the associated CDF of the sampling distribution at that point (a.k.a p-value).</p>
+<p>This is how it may look numerically.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>n <span class="ot">=</span> <span class="dv">6000</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>effect_size <span class="ot">=</span> <span class="fl">0.05</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>A <span class="ot">=</span> <span class="fu">rnorm</span>(n, <span class="dv">0</span>, <span class="dv">1</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>B <span class="ot">=</span> <span class="fu">rnorm</span>(n, effect_size, <span class="dv">1</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>sampling_distribution <span class="ot">=</span> <span class="cf">function</span>(X, Y) {</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">mean =</span> <span class="fu">mean</span>(X) <span class="sc">-</span> <span class="fu">mean</span>(Y),</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">sd =</span> <span class="fu">sqrt</span>(<span class="fu">var</span>(X) <span class="sc">/</span> n <span class="sc">+</span> <span class="fu">var</span>(Y) <span class="sc">/</span> n)</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>sdist <span class="ot">=</span> <span class="fu">sampling_distribution</span>(B, A)</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>t <span class="ot">=</span> sdist<span class="sc">$</span>mean <span class="sc">/</span> sdist<span class="sc">$</span>sd</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="fu">as_tibble</span>(sdist) <span class="sc">|&gt;</span> </span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="fu">everything</span>(), <span class="at">names_to =</span> <span class="st">"statistic"</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Summary statistics of the sampling distribution'</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_minimal</span>(<span class="at">full_width =</span> T, <span class="at">position=</span><span class="st">'left'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="lightable-minimal table table-sm table-striped small" data-quarto-postprocess="true">
+<caption>Summary statistics of the sampling distribution</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">statistic</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">mean</td>
+<td style="text-align: right;">0.0419394</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">sd</td>
+<td style="text-align: right;">0.0183665</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">tibble</span>(</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">statistic =</span> <span class="fu">c</span>(<span class="st">'Test statistic'</span>, <span class="st">'P-value'</span>),</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">value =</span> <span class="fu">c</span>(t, (<span class="dv">1</span> <span class="sc">-</span> <span class="fu">pnorm</span>(t)) <span class="sc">*</span> <span class="dv">2</span>)</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span> <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Hypothesis test outcomes'</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_minimal</span>(<span class="at">full_width =</span> T, <span class="at">position=</span><span class="st">'left'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="lightable-minimal table table-sm table-striped small" data-quarto-postprocess="true">
+<caption>Hypothesis test outcomes</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">statistic</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Test statistic</td>
+<td style="text-align: right;">2.2834717</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">P-value</td>
+<td style="text-align: right;">0.0224026</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+<p>As a visual reminder - the p-value is twice the CDF of the sampling distribution in the range <span class="math inline">\([-\infty, 0]\)</span> (twice, because we’re testing for a two-sided alternative hypothesis).</p>
+<div class="cell">
+<div class="cell-output-display">
+<p><img src="bayesian-ab-testing_files/figure-html/unnamed-chunk-3-1.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+<p>Mathematically, we don’t need to calculate the test statistic. We can get the CDF directly using the parameters of our sampling distribution.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">#this is also a p-value!</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">pnorm</span>(<span class="dv">0</span>, <span class="at">mean =</span> sdist<span class="sc">$</span>mean, <span class="at">sd =</span> sdist<span class="sc">$</span>sd, <span class="at">lower.tail=</span>T) <span class="sc">*</span> <span class="dv">2</span>, <span class="at">digits=</span><span class="dv">4</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "0.0224"</code></pre>
+</div>
+</div>
+<p>We can double-check using the built-in R functions.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">t.test</span>(B, A)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+    Welch Two Sample t-test
+
+data:  B and A
+t = 2.2835, df = 11997, p-value = 0.02242
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ 0.00593807 0.07794067
+sample estimates:
+   mean of x    mean of y 
+ 0.033779917 -0.008159451 </code></pre>
+</div>
+</div>
+<p>Great, we can conclude that, if our hypothesis of treatment having no effect were true, we would be observing a difference between two groups at least as as large as we did (we observed a difference of <code>0.041</code>) roughly 2% of the time. Sounds rare enough that we could reject our null hypothesis and conclude that there indeed is a difference. We also conclude that the true effect should be somewhere between <code>0.005</code> and <code>0.078</code> 95% of the time, if we were to repeat this experiment an infinity number of times. As for this particular run - well, it’s either inside that range or not. T-test (or frequentist approaches, more generally) don’t tell you anything about this particular experiment. Just long-term probabilities.</p>
+<p>A mouthful. But hey, this isn’t a post about issues with null hypothesis testing. I wrote that <a href="https://aurimas.eu/blog/2023/02/getting-faster-to-decisions-in-a-b-tests-part-2-misinterpretations-and-practical-challenges-of-classical-hypothesis-testing/">one already</a>.</p>
+</section>
+<section id="a-bayesian-approach" class="level4">
+<h4 class="anchored" data-anchor-id="a-bayesian-approach">A Bayesian approach</h4>
+<p>We will use the simplest estimand: the probability that the treatment is larger than 0.</p>
+<p>Next, we will need uninformative priors. We can achieve that by choosing a normal distribution priors with variance approaching infinity (making any number in the real domain roughly equally likely), i.e.:<span class="math inline">\(Y_A, Y_B \sim N(0, 1/\tau)\)</span>, where <span class="math inline">\(\tau\)</span> is some tiny number, e.g.&nbsp;0.001. Note that we did not choose a prior for the treatment effect itself. Instead, we’re effectively saying that both experiment arms have the same mean and can take almost any values with the same likelihood.</p>
+<p>However, we can see what kind of prior on the treatment effect our choice implies by leveraging the fact that a difference of two independent normal distributions is just another normal distribution:</p>
+<p><span class="math display">\[
+\text{if } X \sim N(\mu_x, s_x^2), Y \sim N(\mu_y, s_y^2)\, \text{ then } (X - Y) \sim N(\mu_x - \mu_y, s_x^2 + s_y^2)
+\]</span></p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>difference_of_two_normals <span class="ot">=</span> <span class="cf">function</span>(X, Y) {</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span> (</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">mean =</span> X<span class="sc">$</span>mean <span class="sc">-</span> Y<span class="sc">$</span>mean,</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">tau =</span> <span class="dv">1</span> <span class="sc">/</span> ((<span class="dv">1</span> <span class="sc">/</span> X<span class="sc">$</span>tau) <span class="sc">+</span> (<span class="dv">1</span> <span class="sc">/</span> Y<span class="sc">$</span>tau)),</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">sd =</span> <span class="fu">sqrt</span>((<span class="dv">1</span> <span class="sc">/</span> X<span class="sc">$</span>tau) <span class="sc">+</span> (<span class="dv">1</span> <span class="sc">/</span> Y<span class="sc">$</span>tau))</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="fu">difference_of_two_normals</span>(<span class="fu">list</span>(<span class="at">mean=</span><span class="dv">0</span>, <span class="at">tau=</span><span class="fl">0.001</span>), <span class="fu">list</span>(<span class="at">mean=</span><span class="dv">0</span>, <span class="at">tau=</span><span class="fl">0.001</span>)) <span class="sc">|&gt;</span> </span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">as_tibble</span>() <span class="sc">|&gt;</span> <span class="fu">pivot_longer</span>(<span class="fu">everything</span>(), <span class="at">names_to =</span> <span class="st">'statistic'</span>) <span class="sc">|&gt;</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Implied treatment effect prior distribution'</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_minimal</span>(<span class="at">full_width =</span> T, <span class="at">position=</span><span class="st">'left'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="lightable-minimal table table-sm table-striped small" data-quarto-postprocess="true">
+<caption>Implied treatment effect prior distribution</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">statistic</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">mean</td>
+<td style="text-align: right;">0.00000</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">tau</td>
+<td style="text-align: right;">0.00050</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">sd</td>
+<td style="text-align: right;">44.72136</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+<p>We can see that choosing a prior for experiment results of zero mean and <span class="math inline">\(\tau=0.001\)</span> (or, equivalently, standard deviation of <span class="math inline">\(\sqrt(\frac{1}{0.001})=31.6\)</span>) yields a prior on the treatment effect that also has a zero mean but has even more uncertainty, with standard deviation of <span class="math inline">\(44.7\)</span>.</p>
+<p>Next, we need to get to posterior distributions. Luckily, a normal prior and a normal likelihood form a conjugate pair that yields a normal posterior distribution, so we can do this algebraically. Specifically, suppose the prior distribution is <span class="math inline">\(P_0 \sim N(\mu_0, \tau_0^{-1})\)</span>, the observed mean is <span class="math inline">\(\bar{X}\)</span> and observed precision is <span class="math inline">\(\bar{\tau} = \frac{1}{s^2_x}\)</span>. Then the posterior is <span class="math inline">\(P \sim N \left(\frac{\tau_0 \mu_0+\bar{\tau} * \bar{X} * n}{\tau_0+ n \tau},\left(\tau_0+n \tau\right)^{-1}\right)\)</span>. Let’s calculate the posteriors for our samples.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>calculate_normal_posterior <span class="ot">=</span> <span class="cf">function</span>(X, prior) {</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  n <span class="ot">=</span> <span class="fu">length</span>(X)</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  observed_mu <span class="ot">=</span> <span class="fu">mean</span>(X)</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  observed_tau <span class="ot">=</span> <span class="dv">1</span> <span class="sc">/</span> <span class="fu">var</span>(X)</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">mean =</span> (prior<span class="sc">$</span>tau <span class="sc">*</span> prior<span class="sc">$</span>mean <span class="sc">+</span> observed_tau <span class="sc">*</span> observed_mu <span class="sc">*</span> n) <span class="sc">/</span> (prior<span class="sc">$</span>tau <span class="sc">+</span> n <span class="sc">*</span> observed_tau),</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">tau =</span> (prior<span class="sc">$</span>tau <span class="sc">+</span> n <span class="sc">*</span> observed_tau),</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">sd =</span> <span class="fu">sqrt</span>(<span class="dv">1</span> <span class="sc">/</span> (prior<span class="sc">$</span>tau <span class="sc">+</span> n <span class="sc">*</span> observed_tau))</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>A_posterior <span class="ot">=</span> <span class="fu">calculate_normal_posterior</span>(A, <span class="fu">list</span>(<span class="at">mean=</span><span class="dv">0</span>, <span class="at">tau=</span><span class="fl">0.001</span>))</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>B_posterior <span class="ot">=</span> <span class="fu">calculate_normal_posterior</span>(B, <span class="fu">list</span>(<span class="at">mean=</span><span class="dv">0</span>, <span class="at">tau=</span><span class="fl">0.001</span>))</span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a><span class="fu">bind_rows</span>(A_posterior, B_posterior, <span class="at">.id =</span> <span class="st">'ID'</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">ID =</span> <span class="fu">str_replace_all</span>(ID, <span class="fu">c</span>(<span class="st">'1'</span><span class="ot">=</span><span class="st">'A'</span>, <span class="st">'2'</span><span class="ot">=</span><span class="st">'B'</span>))) <span class="sc">|&gt;</span></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Posterior distributions of experiment arms'</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_minimal</span>(<span class="at">full_width =</span> T, <span class="at">position=</span><span class="st">'left'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="lightable-minimal table table-sm table-striped small" data-quarto-postprocess="true">
+<caption>Posterior distributions of experiment arms</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">ID</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">mean</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">tau</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">sd</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">A</td>
+<td style="text-align: right;">-0.0081594</td>
+<td style="text-align: right;">5873.761</td>
+<td style="text-align: right;">0.0130479</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">B</td>
+<td style="text-align: right;">0.0337799</td>
+<td style="text-align: right;">5985.180</td>
+<td style="text-align: right;">0.0129259</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+<p>We have posterior distributions for the data of the two samples, but we are after the treatment effect - i.e., the difference between the two samples. We can use the same approach as previously and calculate it, as the two posteriors can be assumed to be independent, too.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>treatment_posterior <span class="ot">=</span> <span class="fu">difference_of_two_normals</span>(B_posterior, A_posterior)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>treatment_posterior <span class="sc">|&gt;</span> <span class="fu">as_tibble</span>() <span class="sc">|&gt;</span> <span class="fu">pivot_longer</span>(<span class="fu">everything</span>(), <span class="at">names_to =</span> <span class="st">'statistic'</span>) <span class="sc">|&gt;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Posterior distribution of the treatment effect'</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_minimal</span>(<span class="at">full_width =</span> T, <span class="at">position=</span><span class="st">'left'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="lightable-minimal table table-sm table-striped small" data-quarto-postprocess="true">
+<caption>Posterior distribution of the treatment effect</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">statistic</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">mean</td>
+<td style="text-align: right;">0.0419394</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">tau</td>
+<td style="text-align: right;">2964.4734513</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">sd</td>
+<td style="text-align: right;">0.0183665</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+<p>Let’s visualize it.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_function</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">fun =</span> dnorm, </span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">args =</span> <span class="fu">within</span>(treatment_posterior, <span class="fu">rm</span>(<span class="st">"tau"</span>))</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>) <span class="sc">+</span> <span class="fu">xlim</span>(<span class="sc">-</span><span class="fl">0.1</span>, <span class="fl">0.1</span>) <span class="sc">+</span> </span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept=</span><span class="dv">0</span>, <span class="at">color=</span><span class="st">'red'</span>, <span class="at">linetype=</span><span class="st">'dashed'</span>) <span class="sc">+</span> </span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">xlab</span>(<span class="st">""</span>) <span class="sc">+</span> <span class="fu">ggtitle</span>(<span class="st">"PDF the treatment effect"</span>) <span class="sc">+</span> <span class="fu">ylab</span>(<span class="st">"Density"</span>) <span class="sc">+</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_light</span>() <span class="sc">+</span> <span class="fu">theme</span>(<span class="at">panel.grid=</span><span class="fu">element_blank</span>())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="bayesian-ab-testing_files/figure-html/unnamed-chunk-9-1.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+<p>That looks familiar! Let’s overlay the sampling distribution from the t-test:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_function</span>(</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">fun =</span> dnorm, </span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">args =</span> <span class="fu">within</span>(treatment_posterior, <span class="fu">rm</span>(<span class="st">"tau"</span>)),</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">aes</span>(<span class="at">color =</span> <span class="st">'Posterior of a treatment effect'</span>),</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">linetype=</span><span class="st">'dashed'</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>) <span class="sc">+</span> <span class="fu">xlim</span>(<span class="sc">-</span><span class="fl">0.1</span>, <span class="fl">0.1</span>) <span class="sc">+</span> </span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_function</span>(</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">fun =</span> dnorm, </span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">args =</span> sdist,</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">aes</span>(<span class="at">color =</span> <span class="st">'Sampling distribution'</span>),</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">linetype=</span><span class="st">'twodash'</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>) <span class="sc">+</span> <span class="fu">xlab</span>(<span class="st">""</span>) <span class="sc">+</span> <span class="fu">ggtitle</span>(<span class="st">"Treatment effect posterior distribution vs. Sampling distribution"</span>) <span class="sc">+</span> </span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ylab</span>(<span class="st">"Density"</span>) <span class="sc">+</span> <span class="fu">labs</span>(<span class="at">color=</span><span class="st">''</span>) <span class="sc">+</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_light</span>() <span class="sc">+</span> <span class="fu">theme</span>(<span class="at">panel.grid=</span><span class="fu">element_blank</span>(), <span class="at">legend.position=</span><span class="st">'bottom'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="bayesian-ab-testing_files/figure-html/unnamed-chunk-10-1.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+<p>They are identical! This means that the probability of the treatment effect being smaller than zero is—you guessed it—equal to 1/2 of a two-sided p-value—or, in other words, identical to the one-sided p-value.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="t-test%20vs.%20bayes.jpg" class="img-fluid figure-img"></p>
+</figure>
+</div>
+<p>This is no coincidence. We can prove that mathematically. Here’s the posterior formula again:</p>
+<p><span class="math display">\[
+P \sim N \left(\frac{\tau_0 \mu_0+\bar{\tau} * \bar{X} * n}{\tau_0+ n \tau},\left(\tau_0+n \tau\right)^{-1}\right)
+\]</span></p>
+<p>Now, if we let the prior variance go to infinity, the <span class="math inline">\(\tau_0\)</span> term goes to zero. In that case, the posterior simplifies to:</p>
+<p><span class="math display">\[
+P \sim N \left(\bar{X},\left(n \tau\right)^{-1}\right)
+\]</span></p>
+<p>We can plug it into the formula for calculating the difference between two normal distributions:</p>
+<p><span class="math display">\[
+(X - Y) \sim N(\mu_x - \mu_y, s_x^2 + s_y^2) = N(\bar{X} - \bar{Y}, \frac{1}{n_X \tau_X} + \frac{1}{n_Y \tau_Y}) = N(\bar{X} - \bar{Y}, \frac{s_X^2}{n_X} + \frac{s^2_Y}{n_Y})
+\]</span></p>
+<p>What we get is precisely the sampling distribution used in the frequentist t-test.</p>
+<p><strong>So, no, it’s not true that using uninformative priors will yield rubbish results</strong>. You are not forced to use subjective priors, opening yourself to the risk of mispecifying them.</p>
+<p>In fact, you’ll get precisely the same results as a one-sided p-value, which also means you have the same statistical guarantees. If your decision criterion is to look at experiment results once and adopt the treatment when the probability that it is above zero is 95% or more (and thus the probability it’s below zero is 5% or less), you will be right 95% of the time, just like you would if you were to rely on p-values and statistical significance.</p>
+<p>(This result also makes me wonder if all those people arguing for one-sided tests were right, but that’s for another time.)</p>
+</section>
+</section>
+<section id="a-non-gaussian-case" class="level3">
+<h3 class="anchored" data-anchor-id="a-non-gaussian-case">A non-Gaussian case</h3>
+<p>You may rightfully wonder if the above result extends to non-Gaussian situations. I can’t prove it mathematically, but numerical simulations tell me the answer is yes. Let’s consider the most popular A/B testing situation involving binary outcomes (e.g., conversion rates).</p>
+<ul>
+<li><p>Our outcome metric follows the Bernoulli distribution: <span class="math inline">\(X \sim \text{Bernoulli}(p)\)</span>. Because the individual user observations are independent, we can interpret the entire sample with <span class="math inline">\(n\)</span> observations and <span class="math inline">\(k\)</span> successes as a binomial distribution with rate <span class="math inline">\(p\)</span>.</p></li>
+<li><p>We will use uninformative beta distribution priors <span class="math inline">\(P_0 \sim \text{Beta}(\alpha_0=1,\beta_0=1)\)</span></p></li>
+<li><p>The posterior of a beta prior and binomial likelihood is another conjugate pair, resulting in a beta distribution with parameters <span class="math inline">\(\alpha=\alpha_0 + k, \beta = \beta_0 + (n - k)\)</span>.</p></li>
+</ul>
+<p>We will also need to be able to calculate a difference between two random variables following Beta distributions. A <a href="https://www.tandfonline.com/doi/abs/10.1080/03610929308831114">closed-form solution</a> exists to calculate this difference, but it involves Appell F1 hypergeometric functions that I couldn’t get to work with large <span class="math inline">\(n\)</span>. So instead, we will rely on the fact that a <a href="https://www.countbayesie.com/blog/2022/11/30/understanding-convolutions-in-probability-a-mad-science-perspective">sum / difference of two independent PDFs can be calculated using convolutions</a>.</p>
+<p>Let’s generate some data. We’ll use a baseline of <span class="math inline">\(0.17\)</span>, an effect size of <span class="math inline">\(0.02\)</span>, and a group size of 6,000, which should yield us ~80% power.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>eff <span class="ot">=</span> <span class="fl">0.02</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>baseline <span class="ot">=</span> <span class="fl">0.17</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>n_group <span class="ot">=</span> <span class="dv">6000</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="fu">power.prop.test</span>(<span class="at">n=</span>n_group, <span class="at">p1 =</span> baseline, <span class="at">p2 =</span> baseline <span class="sc">+</span> eff, <span class="at">sig.level=</span><span class="fl">0.05</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+     Two-sample comparison of proportions power calculation 
+
+              n = 6000
+             p1 = 0.17
+             p2 = 0.19
+      sig.level = 0.05
+          power = 0.8137145
+    alternative = two.sided
+
+NOTE: n is number in *each* group</code></pre>
+</div>
+</div>
+<p>Let’s define a couple of helper functions.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>get_samples <span class="ot">=</span> <span class="cf">function</span>(n_group, baseline, eff) {</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">A =</span> <span class="fu">rbinom</span>(n_group, <span class="dv">1</span>, baseline),</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">B =</span> <span class="fu">rbinom</span>(n_group, <span class="dv">1</span>, baseline <span class="sc">+</span> eff)</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>calculate_beta_posterior <span class="ot">=</span> <span class="cf">function</span>(X, prior){</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">alpha =</span> prior<span class="sc">$</span>alpha <span class="sc">+</span> <span class="fu">sum</span>(X),</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">beta =</span> prior<span class="sc">$</span>beta <span class="sc">+</span> (<span class="fu">length</span>(X) <span class="sc">-</span> <span class="fu">sum</span>(X))</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a><span class="co">#calculate density at a given point X for the difference between two beta distributions</span></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>pdf_beta_diff <span class="ot">=</span> <span class="cf">function</span>(X, d1, d2) {</span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sapply</span>(X, <span class="cf">function</span>(t) {</span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">integrate</span>(<span class="cf">function</span>(i) {</span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a>      (<span class="fu">dbeta</span>(i, d1<span class="sc">$</span>alpha, d1<span class="sc">$</span>beta) <span class="sc">*</span> <span class="fu">dbeta</span>(i<span class="sc">-</span>t, d2<span class="sc">$</span>alpha, d2<span class="sc">$</span>beta) <span class="sc">+</span> <span class="fu">dbeta</span>(i, d2<span class="sc">$</span>alpha, d2<span class="sc">$</span>beta) <span class="sc">*</span> <span class="fu">dbeta</span>(i<span class="sc">+</span>t, d1<span class="sc">$</span>alpha, d1<span class="sc">$</span>beta)) <span class="sc">/</span> <span class="dv">2</span></span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>    }, <span class="at">lower=</span><span class="sc">-</span><span class="cn">Inf</span>, <span class="at">upper=</span><span class="cn">Inf</span>, <span class="at">stop.on.error =</span> F)<span class="sc">$</span>value</span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a><span class="co">#calculate a total CDF between X and Y for two beta distributions</span></span>
+<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a>cdf_beta_diff <span class="ot">=</span> <span class="cf">function</span>(X, Y, d1, d2) {</span>
+<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">integrate</span>(pdf_beta_diff, d1, d2, <span class="at">lower=</span>X, <span class="at">upper=</span>Y, <span class="at">stop.on.error =</span> F)<span class="sc">$</span>value</span>
+<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Now, let’s draw one sample and do the calculations.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>data <span class="ot">=</span> <span class="fu">get_samples</span>(n_group, baseline, eff)</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>sdist <span class="ot">=</span> <span class="fu">sampling_distribution</span>(data<span class="sc">$</span>B, data<span class="sc">$</span>A)</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>sdist <span class="sc">|&gt;</span><span class="fu">as_tibble</span>() <span class="sc">|&gt;</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="fu">everything</span>(), <span class="at">names_to =</span> <span class="st">"statistic"</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Summary statistics of the sampling distribution'</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_minimal</span>(<span class="at">full_width =</span> T, <span class="at">position=</span><span class="st">'left'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="lightable-minimal table table-sm table-striped small" data-quarto-postprocess="true">
+<caption>Summary statistics of the sampling distribution</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">statistic</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">mean</td>
+<td style="text-align: right;">0.016500</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">sd</td>
+<td style="text-align: right;">0.007012</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>A_posterior <span class="ot">=</span> <span class="fu">calculate_beta_posterior</span>(data<span class="sc">$</span>A, <span class="fu">list</span>(<span class="at">alpha=</span><span class="dv">1</span>, <span class="at">beta=</span><span class="dv">1</span>))</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>B_posterior <span class="ot">=</span> <span class="fu">calculate_beta_posterior</span>(data<span class="sc">$</span>B, <span class="fu">list</span>(<span class="at">alpha=</span><span class="dv">1</span>, <span class="at">beta=</span><span class="dv">1</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Let’s visualize the posterior vs.&nbsp;the sampling distribution.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_function</span>(</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">fun =</span> pdf_beta_diff, </span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">args =</span> <span class="fu">list</span>(<span class="at">d1=</span>B_posterior, <span class="at">d2=</span>A_posterior),</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">aes</span>(<span class="at">color =</span> <span class="st">'Posterior of treatment effect'</span>),</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">linetype=</span><span class="st">'twodash'</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>) <span class="sc">+</span> <span class="fu">xlim</span>(<span class="sc">-</span><span class="fl">0.05</span>, <span class="fl">0.05</span>) <span class="sc">+</span> </span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_function</span>(</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">fun =</span> dnorm, </span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">args =</span> sdist,</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">aes</span>(<span class="at">color =</span> <span class="st">'Sampling distribution'</span>),</span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">linetype=</span><span class="st">'dotted'</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>) <span class="sc">+</span> <span class="fu">xlab</span>(<span class="st">""</span>) <span class="sc">+</span> <span class="fu">ggtitle</span>(<span class="st">"Treatment effect posterior distribution vs. Sampling distribution"</span>) <span class="sc">+</span> </span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ylab</span>(<span class="st">"Density"</span>) <span class="sc">+</span> <span class="fu">labs</span>(<span class="at">color=</span><span class="st">''</span>) <span class="sc">+</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_light</span>() <span class="sc">+</span> <span class="fu">theme</span>(<span class="at">panel.grid=</span><span class="fu">element_blank</span>(), <span class="at">legend.position=</span><span class="st">'bottom'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="bayesian-ab-testing_files/figure-html/unnamed-chunk-15-1.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+<p>And compare one-sided p-value vs.&nbsp;posterior probability that treatment is below zero.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="fu">tibble</span>(</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">statistic =</span> <span class="fu">c</span>(<span class="st">'One-sided p-value'</span>, <span class="st">'Probabability treatment is &lt; 0'</span>), </span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">value =</span> <span class="fu">c</span>(</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">t.test</span>(data<span class="sc">$</span>B, data<span class="sc">$</span>A, <span class="at">alternative=</span><span class="st">'g'</span>)<span class="sc">$</span>p.value, </span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cdf_beta_diff</span>(<span class="sc">-</span><span class="cn">Inf</span>, <span class="dv">0</span>, B_posterior, A_posterior)</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span> <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'P-value vs. Bayesian estimate of treatment effect &lt; 0'</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_minimal</span>(<span class="at">full_width =</span> T, <span class="at">position=</span><span class="st">'left'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="lightable-minimal table table-sm table-striped small" data-quarto-postprocess="true">
+<caption>P-value vs. Bayesian estimate of treatment effect</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">statistic</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">One-sided p-value</td>
+<td style="text-align: right;">0.0093164</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Probabability treatment is &lt; 0</td>
+<td style="text-align: right;">0.0093215</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+<p>All looks identical. To be sure, we can repeat the procedure 1000 times.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>sim_results <span class="ot">=</span> <span class="fu">sapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">1000</span>, <span class="cf">function</span>(i) {</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>  data <span class="ot">=</span> <span class="fu">get_samples</span>(n_group, baseline, eff)</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>  A_posterior <span class="ot">=</span> <span class="fu">calculate_beta_posterior</span>(data<span class="sc">$</span>A, <span class="fu">list</span>(<span class="at">alpha=</span><span class="dv">1</span>, <span class="at">beta=</span><span class="dv">1</span>))</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>  B_posterior <span class="ot">=</span> <span class="fu">calculate_beta_posterior</span>(data<span class="sc">$</span>B, <span class="fu">list</span>(<span class="at">alpha=</span><span class="dv">1</span>, <span class="at">beta=</span><span class="dv">1</span>))</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>  posterior_prob_above_zero <span class="ot">=</span> <span class="fu">cdf_beta_diff</span>(<span class="sc">-</span><span class="cn">Inf</span>, <span class="dv">0</span>, B_posterior, A_posterior)</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>  p_value <span class="ot">=</span> <span class="fu">t.test</span>(data<span class="sc">$</span>B, data<span class="sc">$</span>A, <span class="at">alternative=</span><span class="st">'g'</span>)<span class="sc">$</span>p.value</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">c</span>(posterior_prob_above_zero, p_value)</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>})</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="cell-output-display">
+<p><img src="bayesian-ab-testing_files/figure-html/unnamed-chunk-18-1.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+<p>I hope that’s convincing. It has some funny implications, too. All those difficulties with interpreting p-values? A p-value is not a measure for evidence, etc.? Well, I think I have proven to myself (and hopefully, you, too) that if we are willing to assume that we are equally likely to observe data of any value, then <em>under our very simple and restrictive setting of two independent samples with data generating process following Normal distribution (or distribution that converges to Normal, such as Beta)</em>:</p>
+<ul>
+<li><p>A one-sided p-value is equal to the probability that the treatment is negative;</p></li>
+<li><p>(1 - p-value) is equal to the probability that the treatment is positive (gasp!)</p></li>
+</ul>
+<p>In other words, we can all run t-tests and report p-values as probabilities of treatment effects. No more worrying about explaining statistical significance!</p>
+<p>Sure, I am joking. <strong>Or am I?</strong> The math is pretty convincing.</p>
+<p>One good reason not to do that is because the assumption of flat priors is pretty stupid. If you’re running conversion tests on a website, surely you know better than to say, “Ah, it can be anything, really.” So maybe that’s the answer to the people who want to misinterpret p-values as measures of evidence—“Yes, it’s a probability of treatment being better/worse, but only if you’re assuming our conversion rates can be anything.”</p>
+</section>
+</section>
+<section id="wrapping-up" class="level2">
+<h2 class="anchored" data-anchor-id="wrapping-up">Wrapping up</h2>
+<p>That’s it for this post. I hope it’s easier to believe that Bayesian methods are not chemical dumpster fire, unlike Optimizely wants you to believe. I also hope that it’s clear why a comparison of a specific frequentist procedure (such as a sequential test) to the abstract concept of Bayesian methods doesn’t make much sense. It’s like comparing Fuji apples and vegetables. Furthermore, I hope I’ve shown why Bayesian methods are not “just about priors and injecting subjectivity.” The other benefits — the choice of different decision metrics and the ability to propagate uncertainty — can be strong enough reasons alone to consider them.</p>
+<p>This entire post also used very “simple maths”. No MCMC and computationally expensive procedures where required. That’s another misconception that often comes up - it’s true that Bayesian estimation procedures are more computationally taxing, but in the case of A/B testing, that only becomes relevant when you enter the territory of hierarchical models or use covariates (CUPED-like setups). Conjugate distribution pairs can get you quite far - in fact, LaunchDarkly, one of the vendors in the space, <a href="https://docs.launchdarkly.com/guides/experimentation/methodology">seems to be using them exclusively</a> to estimate experiment results.</p>
+<p>Finally, we saw that, with uninformative priors, a Bayesian estimand of a probability of treatment effect above zero is equivalent to outputs of a frequentist t-test. It’s both a good and a bad thing. It’s good because it’s nice to see how the two approaches converge. It also gives us a probabilistic p-value interpretation that most business stakeholders would understand more intuitively. The bad thing, however, is that it only happens under very unrealistic assumptions of prior distributions, and in practice, you should probably refrain from using them.</p>
+<p>That leads to the world of informative priors. That must be where the dumpster fire starts, experiments run as slow as molasses, and all statistical guarantees disappear. Up for part 2?</p>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button', {
+    text: function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+  });
+  clipboard.on('success', function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  });
+  function tippyHover(el, contentFn) {
+    const config = {
+      allowHTML: true,
+      content: contentFn,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start'
+    };
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      return note.innerHTML;
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+</body></html>
