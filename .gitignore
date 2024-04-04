@@ -1,2 +1,4 @@
 __pycache__
 *.netcdf
+*:Zone.Identifier
+*_files/

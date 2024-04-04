@@ -4,9 +4,60 @@ format: html
 editor: visual
 ---
 
-```{r}
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(kableExtra)
 library(scales)
 library(pbapply)
+```
+
+```{r}
+difference_of_two_normals = function(X, Y) {
+  list (
+    mean = X$mean - Y$mean,
+    tau = 1 / ((1 / X$tau) + (1 / Y$tau)),
+    sd = sqrt((1 / X$tau) + (1 / Y$tau))
+  )
+}
+
+calculate_beta_posterior = function(X, prior){
+  list(
+    alpha = prior$alpha + sum(X),
+    beta = prior$beta + (length(X) - sum(X))
+  )
+}
+
+#calculate density at a given point X for the difference between two beta distributions
+pdf_beta_diff = function(X, d1, d2) {
+  
+  sapply(X, function(t) {
+    integrate(function(i) {
+      (dbeta(i, d1$alpha, d1$beta) * dbeta(i-t, d2$alpha, d2$beta) + dbeta(i, d2$alpha, d2$beta) * dbeta(i+t, d1$alpha, d1$beta)) / 2
+    }, lower=-Inf, upper=Inf, stop.on.error = F)$value
+    })
+  
+}
+
+#calculate a total CDF between X and Y for two beta distributions
+cdf_beta_diff = function(X, Y, d1, d2) {
+  integrate(pdf_beta_diff, d1, d2, lower=X, upper=Y, stop.on.error = F)$value
+}
+```
+
+```{r}
+eff = 0.02
+baseline = 0.17
+n_group = 6000
+
+set.seed(42)
+get_samples = function(n_group, baseline, eff) {
+  list(
+    A = rbinom(n_group, 1, baseline),
+    B = rbinom(n_group, 1, baseline + eff)
+  )
+}
+data = get_samples(n_group, baseline, eff)
 ```
 
 So, how do we go about setting better priors?
@@ -252,7 +303,7 @@ A couple of things jump out:
 baseline = 0.17
 n_group = 6000
 sd_treatment_effect = 0.015
-avg_treatment_effect = 0.005
+avg_treatment_effect = 0.00
 
 eff_size_generator_normal = function()  {
   rnorm(1, avg_treatment_effect, sd_treatment_effect)
@@ -263,26 +314,32 @@ eff_size_density_normal = function(x) {
 }
 
 eff_size_generator_gamma = function() {
-  rgamma(1, 2, 2) / 50 - 0.01
+  rgamma(1, 2, 2) / 50 - 1/50 + avg_treatment_effect
 }
 
 eff_size_density_gamma = function(x) {
-  dgamma((x + 0.01) * 50, 2, 2) * 50
+  dgamma((x - avg_treatment_effect + 1/50) * 50, 2, 2) * 50
 }
+
+eff_size_density = eff_size_density_normal
+eff_size_generator = eff_size_generator_normal
+
+mean(sapply(1:10000, function(i) eff_size_generator()))
+sd(sapply(1:10000, function(i) eff_size_generator()))
 
 
 ```
 
 ```{r}
 
-ggplot() + stat_function(fun = eff_size_density_gamma) + xlim(-0.05, 0.05)
+ggplot() + stat_function(fun = eff_size_density) + xlim(-0.05, 0.05)
 ```
 
 ```{r}
 
 set.seed(42)
-sim_results = lapply(1:10000, function(i) {
-  eff_size = eff_size_generator_gamma()
+sim_results = pblapply(1:10000, function(i) {
+  eff_size = eff_size_generator()
   baseline_observed = rbeta(1, n_group * baseline, n_group * (1 - baseline))
   A = rbinom(n_group, 1, baseline_observed)
   B = rbinom(n_group, 1, baseline_observed + eff_size)
@@ -295,10 +352,12 @@ sim_results = lapply(1:10000, function(i) {
     A_rate = mean(A),
     B_rate = mean(B),
     A_var = var(A),
-    B_var = var(B)
+    B_var = var(B),
+    group_size = n_group,
+    experiment = i
   )
   
-})
+}, cl=4)
 ```
 
 ```{r}
@@ -308,7 +367,7 @@ power.prop.test(n=n_group, p1=baseline, p2=baseline + avg_treatment_effect)
 ```{r, warning=FALSE, message=F}
 
 integrate(function(x) {
-  eff_size_density_gamma(x) * 
+  eff_size_density(x) * 
   replace_na(power.prop.test(n=n_group, p1=baseline, p2=baseline + x)$power, 0)
   
 }, -Inf, Inf)
@@ -318,7 +377,7 @@ integrate(function(x) {
 sim_results |> bind_rows() |> ggplot() + geom_density(aes(
   x=effect_size, color='Simulated effect sizes')) + 
   stat_function(
-    fun = eff_size_density_gamma,
+    fun = eff_size_density,
     aes(color = 'Dist. overlay')
 )
 ```
@@ -327,7 +386,7 @@ sim_results |> bind_rows() |> ggplot() + geom_density(aes(
 
 fr_results = sim_results |> bind_rows() |>
   mutate(mean_diff = B_rate - A_rate) |> 
-  mutate(sd_error = sqrt(B_var / n_group + A_var / n)) |>
+  mutate(sd_error = sqrt(B_var / group_size + A_var / group_size)) |>
   mutate(t_statistic = mean_diff / sd_error) |>
   mutate(is_stat_sig = abs(t_statistic) > qnorm(0.975)) |>
   mutate(S_error = is_stat_sig & (sign(mean_diff) != sign(effect_size))) |>
@@ -394,29 +453,32 @@ fr_results |>
 
 ```{r}
 
-prior = priors[[1]]
+evaluate_bayes = function(raw_results) {
 
-x = sim_results[[1]]
+  pblapply(priors, function(prior) {
+    raw_results |> lapply(function(x) {
+      A_posterior = list(data = list(
+        alpha = prior$data$alpha + x$A_conversions,
+        beta = prior$data$beta + (x$group_size - x$A_conversions)
+      )) |> add_summary_stats()
+      
+      B_posterior = list(data = list(
+          alpha = prior$data$alpha + x$B_conversions,
+          beta = prior$data$beta + (x$group_size - x$B_conversions)
+      )) |> add_summary_stats()
+      
+      approx_tr = difference_of_two_normals(B_posterior$data, A_posterior$data)
+      
+      x$prob_above_zero = 1 - pnorm(0, mean = approx_tr$mean, sd = approx_tr$sd)
+      #x$prob_above_zero = cdf_beta_diff(0, Inf, B_posterior, A_posterior)
+      x$prior = prior$name
+      x
+    })
+  }, cl=4)
 
-bayes_results = sim_results |> pblapply(function(x) {
-  A_posterior = list(data = list(
-    alpha = prior$data$alpha + x$A_conversions,
-    beta = prior$data$beta + (n_group - x$A_conversions)
-  )) |> add_summary_stats()
-  
-  B_posterior = list(data = list(
-      alpha = prior$data$alpha + x$B_conversions,
-      beta = prior$data$beta + (n_group - x$B_conversions)
-  )) |> add_summary_stats()
-  
-  approx_tr = difference_of_two_normals(B_posterior$data, A_posterior$data)
-  
-  x$prob_above_zero = 1 - pnorm(0, mean = approx_tr$mean, sd = approx_tr$sd)
-  #x$prob_above_zero = cdf_beta_diff(0, Inf, B_posterior, A_posterior)
-  x
-}, cl=4)
+}
 
-bayes_results
+bayes_results = evaluate_bayes(sim_results)
 ```
 
 ```{r}
@@ -425,8 +487,99 @@ bayes_results |> bind_rows() |>
   mutate(is_stat_sig = !between(prob_above_zero, 0.025, 0.975)) |>
   mutate(S_error = is_stat_sig & (sign(mean_diff) != sign(effect_size))) |>
   mutate(correct = is_stat_sig & (sign(mean_diff) == sign(effect_size))) |>
+  group_by(prior) |>
   summarize(
   not_stat_sig = 1-mean(is_stat_sig), 
   S_error_rate = mean(S_error), accuracy = mean(correct)
 )
+```
+
+```{r}
+set.seed(42)
+peek_size = 300
+number_of_experiments = 5000
+seq_sim_results = pblapply(1:number_of_experiments, function(j) {
+  eff_size = eff_size_generator()
+  baseline_observed = rbeta(1, n_group * baseline, n_group * (1 - baseline))
+  A = rbinom(n_group, 1, baseline_observed)
+  B = rbinom(n_group, 1, baseline_observed + eff_size)
+  
+  lapply(seq(peek_size, n_group, peek_size), function(i) {
+    list(
+      obs_baseline= baseline_observed,
+      effect_size = eff_size,
+      A_conversions = sum(A[1:i]),
+      B_conversions = sum(B[1:i]),
+      A_rate = mean(A[1:i]),
+      B_rate = mean(B[1:i]),
+      A_var = var(A[1:i]),
+      B_var = var(B[1:i]),
+      sequence = i/peek_size,
+      group_size = i,
+      experiment = j
+    )
+    
+  })
+
+  
+  
+}, cl=4)  |> unlist(recursive = F)
+```
+
+```{r}
+bayes_seq_results = evaluate_bayes(seq_sim_results)
+```
+
+```{r}
+bayes_summary_seq = bayes_seq_results |> bind_rows() |>
+  group_by(prior, experiment) |>
+  mutate(
+    is_stat_sig_seq = !between(prob_above_zero, 0.025, 0.975)
+  ) |>
+  summarize(
+    mean_diff = mean(B_rate) - mean(A_rate),
+    effect_size = mean(effect_size),
+    is_stat_sig = max(is_stat_sig_seq), 
+    time_to_decision = min(if_else(is_stat_sig_seq, group_size, n_group))
+    ) |>
+  mutate(S_error = is_stat_sig & (sign(mean_diff) != sign(effect_size))) |>
+  mutate(correct = is_stat_sig & (sign(mean_diff) == sign(effect_size))) 
+
+bayes_summary_seq |>
+  group_by(prior) |>
+  summarize(
+  not_stat_sig = 1-mean(is_stat_sig), 
+  S_error_rate = mean(S_error), accuracy = mean(correct),
+  t = mean(time_to_decision),
+  tm = median(time_to_decision)
+) |> kbl() |> kable_styling()
+```
+
+```{r}
+bayes_summary_seq |> 
+  mutate(eff_size_bin = as.integer(round(effect_size, 3) * 1000)) |> 
+  group_by(eff_size_bin, prior) |>
+  summarize(
+    no_difference_detected = mean(1-is_stat_sig), 
+    sign_error = mean(S_error), 
+    accurate_detection = mean(correct)) |> 
+  pivot_longer(-c(eff_size_bin, prior)) |>
+  mutate(eff_size_bin = eff_size_bin / 1000) |>
+  ggplot() + geom_col(aes(x=eff_size_bin, y=value, fill=name)) +
+  labs(
+    title='Accuracy of t-test as a function of true (unobservable) effect size',
+    y = '# of experiments',
+    x = 'Binned effect size',
+    fill = 'Test outcome'
+  ) +
+  theme_light() + theme(panel.grid=element_blank(), legend.position='bottom') +
+  scale_fill_manual(values=c('darkgreen', 'lightgrey', 'darkred')) + 
+  facet_wrap(~prior) +
+  stat_function(
+    fun = function(x) {
+      1-power.prop.test(n=n_group, p1=baseline, p2=baseline+x)$power
+    },
+    aes(linetype='beta error rate (1 - statistical power)'),
+    color='red'
+  )
 ```
