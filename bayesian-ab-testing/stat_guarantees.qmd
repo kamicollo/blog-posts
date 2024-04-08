@@ -1,10 +1,13 @@
 ---
 title: "Statistical guarantees and long-term error rates in A/B testing"
-subtitle: "Why considering just Type I and II error rates is not sufficient"
+subtitle: "Type I and II error rates are not sufficient, but getting to error rates that matter require Bayesian-like assumptions"
 format: 
   html:
-    code-fold: true
+    code-fold: show
     code-summary: "Show code"
+    fig-align: "center"
+    fig-height: 4
+    fig-width: 8
 editor: visual
 ---
 
@@ -15,6 +18,8 @@ library(ggplot2)
 library(kableExtra)
 library(pbapply)
 ```
+
+## Why Type I and Type II error rates are not enough
 
 Suppose you're the *Head of Something Data Related* in a company that runs many experiments annually, and your job is to ensure that the experimentation program is trustworthy. It's still in the early stages of the experimentation journey in this company, so most tests use null hypothesis testing (NHT) with fixed sample sizes (although you're looking into sequential testing and CUPED, too). You set the following rules for every experiment:
 
@@ -181,6 +186,8 @@ bind_rows(gelman_formula, closed_form, empirical_rates) |>
 Lu, Qiu, and Deng's paper includes a few charts that I replicate below as they are excellent illustrations of the risk associated with Type S and M error rates. On the x-axis, we plot statistical power, and on the y-axis - Type S error rate / Type M ratio:
 
 ```{r}
+#| code-fold: true
+#| code-summary: "Show code"
 
 error_rates = lapply(seq(500, 40000, 500), function(n) {
   calculate_rates(delta, sqrt(baseline_var), n)
@@ -200,45 +207,33 @@ ggplot(error_rates, aes(x=power)) +
 
 We can see that Type S error (which is really bad, decision-making-wise!) largely disappears once we hit power of  0.35−0.4. On the other hand, the type M ratio only goes below 1.5x once we achieve the statistical power of $0.5$. If this does not illustrate the issues with underpowered experiments, I don't know what does!
 
-## Estimating long-term error rates
+## From Type II/M/S errors to long-term error rates
 
 ![](gohanks.jpg)
 
 In my opinion, Type S and M error rates are much more helpful than pure Type I and II errors. However, just like Type II errors, they are not long-term error rates unless we assume we will perfectly set the MDE to the actual effect size in each experiment. If we could do that, we would not need to run experiments!
 
-We could skirt around this issue by reframing error rates to focus on limits/margins, similar how it's done with MDE. However, a statement "we have at most *X%* risk of sign error when we detect statistically significant results and the underlying effect size is at least *Y*" feels not very satisfactory. Can we do better?
+We could skirt around this issue by reframing error rates to focus on limits/margins, similar to how it's done with MDE. However, a statement like "we have at most X% risk of sign error when we detect statistically significant results and the underlying effect size is at least Y" does not feel very satisfactory. Can we do better?
 
-We can, but it requires an additional assumption (no free lunch, as always!). We can borrow an idea from Bayesian statistics and assume a distribution of likely effect sizes (a.k.a. prior distribution) instead of just working with fixed guesses.
+We can, but it requires an additional assumption (there is no free lunch, as always!). We'll borrow an idea from Bayesian statistics: instead of working with fixed values, we can assume a distribution of likely effect sizes (a.k.a. prior distribution)and then integrate over that distribution to get expected error rates.
 
-Suppose we believe our average treatment effect is $0.015$. In a standard setting, we may choose to use it as an MDE. We could estimate the sample size required to achieve 80% power and a $17\%$ conversion baseline - that's about 10,200 observations per group.
+### Some potential effect size distributions
 
-```{r}
-avg_treatment_effect = 0.015
-required_sample_size = ceiling(power.prop.test(
-  p1=baseline, 
-  p2=baseline + avg_treatment_effect, 
-  power=0.8
-)$n)
+How do we select potential treatment size distributions? It's subjective and depends on what you believe! I will use four hypothetical cases:
 
-required_sample_size
-```
+-   **Typical team**. On average, it achieves a $1.5$ percentage point improvement in a metric of interest. The team is as likely to ship experiments that deviate positively from the average as they do negatively, with \~15% of experiments resulting in adverse impact and most experiments falling within $0-4.5$ percentage point improvements.
 
-We can also estimate the corresponding Type S and M error rates given this particular treatment effect and sample size:
+-   **Downside-protected team.** This team ships experiments with the same average impact, but the distribution is not symmetric. There is a longer tail of positive effects and no situations where experiments do extremely poorly (because of safeguards such as dogfooding, UXR, etc.).
 
-```{r}
-calculate_rates(
-  delta = avg_treatment_effect, 
-  sd = sqrt(baseline * (1 - baseline)),
-  n = required_sample_size
-) |> as_tibble() |> 
-  pivot_longer(everything(), names_to='Metric') |> 
-  kbl(caption='Error rates at aa fixed effect size') |> kable_styling()
-```
+-   **Fifty-fifty team.** This team ships experiments with the same variance as the typical team, but their win rate is just 50/50.
 
-To get to long-term error rates (as well as the expectation of error rates for a single experiment, if repeated infinitely), we could, for example, assume that our effect sizes are distributed as a Normal distribution with $\mu=0.015, \sigma=0.014$. Or, perhaps a bit more realistically, we may choose a non-symmetric distribution and, keeping the same mean/standard distribution, assume that many experiments have smaller effect sizes, but there's also a longer tail of positive effects and no situations where experiments do very badly (because of safeguards such as dogfooding, UXR, etc.).
+-   **Golden team.** A team that's hard to beat - they primarily ship winning experiments, and some of them reach up to $5$ percentage point improvements.
 
 ```{r, warning=F, message=F}
+#| code-fold: true
+#| code-summary: "Show code"
 
+avg_treatment_effect = 0.015
 sd_treatment_effect = 0.014
 
 eff_size_distrs = list(
@@ -249,7 +244,7 @@ eff_size_distrs = list(
     density = function(x) dnorm(x, mean = avg_treatment_effect, sd = sd_treatment_effect) 
   ),
   list(
-    name = 'Mediocre team',
+    name = 'Fifty-fifty team',
     distr = 'N(0, 0.014)',
     generator = function() rnorm(1, 0, sd_treatment_effect),
     density = function(x) dnorm(x, mean = 0, sd = sd_treatment_effect) 
@@ -302,23 +297,48 @@ ggplot(emp) +
   ) + facet_wrap(~full_name) +
   geom_vline(xintercept = 0, linetype = 'dotted')
 
-```
-
-```{r}
-
 emp |> group_by(`Assumed distribution`) |>
   summarize(
-    average_treatment_effect = mean(value),
+    `Avg. effect` = mean(value),
     Q10 = quantile(value, 0.1),
     Q90 = quantile(value, 0.9)
   ) |> 
-  arrange(-average_treatment_effect) |>
+  arrange(-`Avg. effect`) |>
   kbl(caption = 'Summary statistics of assumed effect size distributions') |>
   kable_styling()
 
 ```
 
-How do we calculate, say, power over a distribution of possible effect sizes? It's actually pretty simple - we integrate:
+### Estimating long term error rates
+
+Suppose we believe our average treatment effect is $0.015$. In a standard setting, we may choose to use it as an MDE. We could estimate the sample size required to achieve 80% power and a $17\%$ conversion baseline - that's about 10,200 observations per group.
+
+```{r}
+
+required_sample_size = ceiling(power.prop.test(
+  p1=baseline, 
+  p2=baseline + avg_treatment_effect, 
+  power=0.8
+)$n)
+
+required_sample_size
+```
+
+We can also estimate the corresponding Type S and M error rates given this particular treatment effect and sample size:
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show code"
+calculate_rates(
+  delta = avg_treatment_effect, 
+  sd = sqrt(baseline * (1 - baseline)),
+  n = required_sample_size
+) |> as_tibble() |> 
+  pivot_longer(everything(), names_to='Metric') |> 
+  kbl(caption='Error rates at aa fixed effect size') |> kable_styling()
+```
+
+Now, let's instead calculate our "expected detection rate" ("average power") by integrating over the prior distributions:
 
 ```{r, warning=FALSE, message=F}
 
@@ -343,12 +363,21 @@ tibble(
     eff_size_distrs,
     function(x) estimate_power(baseline, required_sample_size, x$density)
   )
-) |> kbl(caption='Average "power" in the long run') |> kable_styling()
+) |> kbl(caption='Long-run detection rates') |> kable_styling()
 ```
 
-Our "average statistical power" (i.e. the probability we will declare an observed difference as statistically significant given our assumptions about sample size, baseline metric value and effect size distribution) is $66\%$ under the normal/symmetric prior distribution assumption and $56\%$ if we believe the asymmetric assumption is more appropriate. Both of them are much lower than the $80\%$ that the classical MDE calculation yields - which is not unexpected, as the latter only considers effect size equal to the MDE, while prior distributions include a lot of density of smaller effect sizes.
+We can see that "average statistical power" (i.e. the probability we will declare an observed difference as statistically significant given our assumptions about sample size, baseline metric value, and effect size distribution):
+
+-   It is lower than the 80% that the classical MDE calculation yields — which is not unexpected, as the latter only considers effect size equal to the MDE, while prior distributions include a lot of density of smaller effect sizes.
+
+-   Anywhere between $49\%$ and $79\%$ - prior distribution assumption matters a lot!
+
+We can also plot expected detection rates as a function of statistical power using a fixed MDE.
 
 ```{r}
+#| code-fold: true
+#| code-summary: "Show code"
+
 p = seq(0.05, 0.99, 0.01)
 
 avg_p = pblapply(p, function(power) {
@@ -368,6 +397,7 @@ avg_p = pblapply(p, function(power) {
 ggplot(avg_p) + 
   geom_line(aes(x= power, y=v, color=name)) +
   geom_abline(intercept = 0, slope=1, linetype='dotted') +
+  geom_vline(xintercept = 0.8, linetype='dashed') +
   theme_light() + 
   theme(
     panel.grid.major = element_blank(),
@@ -377,12 +407,18 @@ ggplot(avg_p) +
     y = 'Avg. expected detection rate',
     color = 'Assumed effect size distribution',
     title = 'Long-run effect detection rates'
-  ) + ylim(0, 1) + xlim(0, 1)
+  ) +
+  scale_x_continuous(breaks = seq(0, 1, 0.1)) +
+  scale_y_continuous(breaks = seq(0, 1, 0.1))
 ```
+
+An [often-quoted](https://hdsr.mitpress.mit.edu/pub/aj31wj81/release/1) figure for the win rate in online experiments is $10-20\%$. The detection rate also includes experiments with a negative impact, so it's not a 1:1 comparison, but it seems that these prior distributions are way too optimistic! Alternatively, the MDEs selected in practice are too high, resulting in low power.
 
 We can do the same with Type S error and Type M error. Type S error is straightforward - we can see that, on average, the risk of sign error is $0.2\%-0.3\%$. That is much higher than what a fixed effect size calculation suggests, but, as a long-term error rate, that's still very low.
 
 ```{r, warning=F, message=F}
+#| code-fold: true
+#| code-summary: "Show code"
 
 estimate_typeS = function(baseline, required_sample_size, density_func) {
   
@@ -423,11 +459,25 @@ ggplot(avg_sign_error) +
     y = 'Avg. Type S error rate',
     color = 'Assumed effect size distribution',
     title = 'Long-run sign error rates'
-  )
+  ) +
+  geom_vline(xintercept = 0.8, linetype='dashed') +
+  scale_y_continuous(breaks=seq(0, 0.016, 0.002))
 
 ```
 
+Type M is a bit trickier because it's a ratio, and integrating it at small effect sizes is challenging as the ratio's denominator approaches zero. Instead of estimating the "average Type M ratio", I will estimate "average absolute exaggeration". That is:
+
+$$
+\text{Absolute exaggeration} = | \text{true effect size} - \text{observed effect size} | \text{ if results are statistically significant, else 0}
+$$
+
+We can see that it works out to be $~0.1$ percentage point at power of $80\%$ (using MDE of $1.5\%$).
+
+This approach, by the way, gets us quite close to expected loss metric used in Bayesian A/B testing, where instead of just capturing the cost of an error as a binary one (like we did above with power or sign error), we capture the magnitude of it, too (a sign error on an estimated effect size of $5$ percentage point is not the same as one on an effect size of $0.5$ percentage point!). But that's for a future blog post.
+
 ```{r}
+#| code-fold: true
+#| code-summary: "Show code"
 
 estimate_typeM = function(baseline, required_sample_size, density_func) {
   
@@ -465,10 +515,78 @@ ggplot(avg_misestimate) +
     legend.position = "right"
   ) + labs(
     x = 'Power @ MDE',
-    y = 'Avg. Type S error rate',
+    y = 'Avg. absolute exaggeration',
     color = 'Assumed effect size distribution',
-    title = 'Long-run sign error rates'
+    title = 'Long-run exaggeration rates'
+  ) + 
+  scale_y_continuous(breaks=seq(0, 0.008, 0.001)) +
+  geom_vline(xintercept = 0.8, linetype='dashed')
+  
+
+
+```
+
+And that's it. All that's left is to come up with prior distributions, MDE, and estimate long-term error rates on your own. I made a small Streamlit app just for that.
+
+## Appendix - I don't trust the maths
+
+Me neither. So I ran another simulation just to double check.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show code"
+
+num_experiments = 50000
+
+used_sample_size = required_sample_size
+used_sample_size = 5000
+
+
+appendix_sim = pblapply(eff_size_distrs, function(d) {
+  drawn_effect_sizes = sapply(
+    1:num_experiments, 
+    function(i) d$generator()
   )
+  
+  set.seed(42)
+  exp_results = tibble(
+    eff_size = drawn_effect_sizes,
+    converted_A = rbinom(
+      num_experiments, 
+      used_sample_size, 
+      baseline
+    ),
+    converted_B = rbinom(
+      num_experiments, 
+      used_sample_size, 
+      baseline + drawn_effect_sizes
+    )
+  )|> mutate(
+    conv_rate_A = converted_A / used_sample_size,
+    conv_rate_B = converted_B / used_sample_size,
+  ) |> mutate(
+    mean_diff = conv_rate_B - conv_rate_A,
+    st_error = sqrt(
+      (conv_rate_A * (1 - conv_rate_A) / used_sample_size) +
+      (conv_rate_B * (1 - conv_rate_B) / used_sample_size)
+    )
+  ) |>
+    mutate(
+      is_stat_sig = abs(mean_diff / st_error) >= qnorm(0.975)
+    ) |> mutate(
+      sign_error = if_else(is_stat_sig, sign(mean_diff) != sign(drawn_effect_sizes), NA),
+      exaggeration = if_else(is_stat_sig, abs(mean_diff - drawn_effect_sizes), NA)
+    )
+  
+  
+  exp_results |> summarize(
+    distribution = d$name,
+    avg_power = mean(is_stat_sig, na.rm=T),
+    avg_sign_error = mean(sign_error, na.rm=T),
+    avg_exaggeration = mean(exaggeration, na.rm=T)
+  )
+}) |> bind_rows()
 
 
+appendix_sim |> kbl(caption='Simulation results') |> kable_styling()
 ```
