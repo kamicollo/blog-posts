@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.4.553">
+<meta name="generator" content="quarto-1.3.450">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -22,7 +22,7 @@ ul.task-list li input[type="checkbox"] {
 }
 /* CSS for syntax highlighting */
 pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
 pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
@@ -67,38 +67,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="stat_guarantees_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="stat_guarantees_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="stat_guarantees_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+
 <script src="stat_guarantees_files/libs/kePrint-0.0.1/kePrint.js"></script>
 <link href="stat_guarantees_files/libs/lightable-0.0.1/lightable.css" rel="stylesheet">
 
   <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
-
-<script type="text/javascript">
-const typesetMath = (el) => {
-  if (window.MathJax) {
-    // MathJax Typeset
-    window.MathJax.typeset([el]);
-  } else if (window.katex) {
-    // KaTeX Render
-    var mathElements = el.getElementsByClassName("math");
-    var macros = [];
-    for (var i = 0; i < mathElements.length; i++) {
-      var texText = mathElements[i].firstChild;
-      if (mathElements[i].tagName == "SPAN") {
-        window.katex.render(texText.data, mathElements[i], {
-          displayMode: mathElements[i].classList.contains('display'),
-          throwOnError: false,
-          macros: macros,
-          fleqn: false
-        });
-      }
-    }
-  }
-}
-window.Quarto = {
-  typesetMath
-};
-</script>
 
 </head>
 
@@ -111,7 +85,7 @@ window.Quarto = {
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
 <h1 class="title">Statistical guarantees and long-term error rates in A/B testing</h1>
-<p class="subtitle lead">Why considering just Type I and II error rates is not sufficient</p>
+<p class="subtitle lead">Type I and II error rates don’t feel satisfactory, but getting to error rates that matter require Bayesian-like assumptions</p>
 </div>
 
 
@@ -124,10 +98,22 @@ window.Quarto = {
   </div>
   
 
-
 </header>
 
-
+<section id="tldr" class="level2">
+<h2 class="anchored" data-anchor-id="tldr">TL;DR</h2>
+<ul>
+<li><p>The “statistical gurantees” in A/B testing (Type I and II error rates) only guarantee reproducibility of a single experiment. They don’t provide any assurance over # of wrong decisions (errors) you are likely to make over a series of experiments.</p></li>
+<li><p>Type I error rate, in particular, is not very useful in the industry setting where small effect sizes still matter (from a business perspective, they are not equivalent to zero) and null hypothesis is, likely, never true.</p></li>
+<li><p>Type S error (probability to observe a result with an opposite sign than the true effect) and Type M error (ratio of exaggeration of observed effect vs.&nbsp;true effect) are much more useful measures than pure Type I and Type II error rates.</p></li>
+<li><p>You can only get to long-term error rates over series of experiments with Bayesian-like assumptions of effect size (experimental impact) distribution.</p></li>
+<li><p>Depending on your belief of experiment impact distribution, running experiments that have <span class="math inline">\(80\%\)</span> estimated statistical power may yield very different long-term detection rates; <span class="math inline">\(80\%\)</span> detection rate is only achievable if you have a very succesful product team. Otherwise, it’s easy to arrive at <span class="math inline">\(50\%\)</span> and lower detection rates.</p></li>
+<li><p>The risk of wrong decisions (Type S error) is minimal, <span class="math inline">\(0.2\% - 0.3\%\)</span>. Exageration errors are unavoidable (winner’s curse phenomenon), but running experiments at <span class="math inline">\(50\%\)</span> power or more reduces their impact considerably.</p></li>
+</ul>
+<p>Here’s a Streamlit app to estimate long-term error rates yourself.</p>
+</section>
+<section id="why-type-i-and-type-ii-error-rates-are-not-enough" class="level2">
+<h2 class="anchored" data-anchor-id="why-type-i-and-type-ii-error-rates-are-not-enough">Why Type I and Type II error rates are not enough</h2>
 <p>Suppose you’re the <em>Head of Something Data Related</em> in a company that runs many experiments annually, and your job is to ensure that the experimentation program is trustworthy. It’s still in the early stages of the experimentation journey in this company, so most tests use null hypothesis testing (NHT) with fixed sample sizes (although you’re looking into sequential testing and CUPED, too). You set the following rules for every experiment:</p>
 <ul>
 <li><p>Only experiments with a p-value &lt; 0.05 will be considered as having conclusive outcomes (you target a Type I error rate <span class="math inline">\(\alpha=0.05\)</span>).</p></li>
@@ -142,10 +128,12 @@ window.Quarto = {
 <li><p>You will have some experiments where the actual difference is precisely zero—not “close enough to zero,” but literally zero.</p></li>
 <li><p>When estimating the required sample size in every experiment, you will always choose MDE precisely equal to the actual unobservable difference for that specific experiment.</p></li>
 </ul>
-<p>Neither of these conditions is likely to hold in the real world. You can get around the second assumption if the MDE used is “minimum effect you care about” - then, you can make a statement that “when the true effect is at least as large as the MDE, we will detect it with at least 80% of the time”, but, in the world of online experiments, do you really not care about small effect sizes? A conversion rate improvement of 0.5 percentage point may still mean <em>many $$</em> annually, but detecting such an MDE requires 3-4x sample size (depending on the baseline) than an MDE of 1 percentage point. Are you willing to make that trade-off?</p>
+<p>Neither of these conditions is likely to hold in the real world.</p>
+<p>You can get around the second assumption if the MDE used is “minimum effect you care about”. Then, you can make a statement that “when the true effect is at least as large as the MDE, we will detect it with at least 80% of the time”. However, in the world of online experiments, do you really not care about detection rates of small effect sizes? A conversion rate improvement of 0.5 percentage point may still mean <em>many $$</em> annually. Achieving 80% power on such an effect size requires 3-4x sample size (depending on the baseline) than an 80% power on an effect size of 1 percentage point. Are you willing to make that trade-off and make all experiments 3-4x slower?</p>
 <p>I’d argue that, in practice, practitioners tend to set MDEs above the minimum effects they care about. On top, conceptually, every experiment likely has a non-zero impact (they may be small, but not exactly zero - otherwise it may be worth disbanding the product team..). As a result, Type I and II error rates aren’t likely to represent the long-term error rates. They have not been designed for that. Instead, they represent frequentist statistics and its definition of probability—the likelihood of observing the same results if you run the same experiment repeatedly.</p>
-<p>As a <em>Head of Something Data,</em> however, you’re not only interested in whether the results of a particular experiment hold. You (should!) want to know the long-term error rates.</p>
+<p>For <em>Head of Something Data,</em> however, knowing whether the results of a particular experiment hold may not be enough. You (should!) also want to know the long-term error rates.</p>
 <p>For that, we need some other measures &amp; some other tools.</p>
+</section>
 <section id="moving-beyond-type-i-error-rates-type-m-and-s-errors" class="level2">
 <h2 class="anchored" data-anchor-id="moving-beyond-type-i-error-rates-type-m-and-s-errors">Moving beyond Type I error rates: Type M and S errors</h2>
 <p>Type I error rate, <span class="math inline">\(\alpha\)</span> is the most known statistical concept among everyone, including non-technical stakeholders. It’s probably the most misinterpreted one, too, given all the issues people have with p-values.</p>
@@ -164,8 +152,8 @@ window.Quarto = {
 <h3 class="anchored" data-anchor-id="calculating-type-s-and-m-error-rates">Calculating Type S and M error rates</h3>
 <p>The original paper proposed calculating Type S and M error rates via simulation using the following function, where <span class="math inline">\(A\)</span> is the effect size, <span class="math inline">\(s\)</span> is the standard error, <span class="math inline">\(\alpha\)</span> is the chosen level of statistical significance, and <span class="math inline">\(df\)</span> represents the degrees of freedom.</p>
 <div class="cell">
-<details class="code-fold">
-<summary>Show code</summary>
+<details open="">
+<summary>Code</summary>
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>retrodesign <span class="ot">&lt;-</span> <span class="cf">function</span>(A, s, <span class="at">alpha=</span>.<span class="dv">05</span>, <span class="at">df=</span><span class="cn">Inf</span>, <span class="at">n.sims=</span><span class="dv">10000</span>){</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  z <span class="ot">&lt;-</span> <span class="fu">qt</span>(<span class="dv">1</span><span class="sc">-</span>alpha<span class="sc">/</span><span class="dv">2</span>, df)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  p.hi <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">-</span> <span class="fu">pt</span>(z<span class="sc">-</span>A<span class="sc">/</span>s, df)</span>
@@ -181,8 +169,8 @@ window.Quarto = {
 </div>
 <p>If we wanted to compute the metrics for a hypothetical A/B test with a binary outcome metric (e.g., conversion rate) where the baseline is <em>17%,</em> MDE of interest is 1 percentage point, and the sample size was 6000 users in each group:</p>
 <div class="cell">
-<details class="code-fold">
-<summary>Show code</summary>
+<details open="">
+<summary>Code</summary>
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>n_group <span class="ot">=</span> <span class="dv">6000</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>baseline <span class="ot">=</span> <span class="fl">0.17</span></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>delta <span class="ot">=</span> <span class="fl">0.01</span></span>
@@ -203,7 +191,6 @@ window.Quarto = {
 <span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>gelman_formula <span class="sc">|&gt;</span> <span class="fu">kbl</span>(<span class="at">caption =</span> <span class="st">'Estimated Metrics'</span>) <span class="sc">|&gt;</span> <span class="fu">kable_styling</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div>
 <table class="table table-sm table-striped small" data-quarto-postprocess="true">
 <caption>Estimated Metrics</caption>
 <thead>
@@ -218,7 +205,7 @@ window.Quarto = {
 <tr class="odd">
 <td style="text-align: right;">0.3081444</td>
 <td style="text-align: right;">0.0010259</td>
-<td style="text-align: right;">1.797852</td>
+<td style="text-align: right;">1.78223</td>
 <td style="text-align: left;">Gelman/Carlin simulation</td>
 </tr>
 </tbody>
@@ -227,11 +214,10 @@ window.Quarto = {
 
 </div>
 </div>
-</div>
 <p>We can validate power calculations using R’s built-in function. Power estimates are very close (differences due to simulation error).</p>
 <div class="cell">
-<details class="code-fold">
-<summary>Show code</summary>
+<details open="">
+<summary>Code</summary>
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">power.prop.test</span>(<span class="at">n=</span>n_group, <span class="at">p1=</span>baseline, <span class="at">p2 =</span> baseline <span class="sc">+</span> delta)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
@@ -250,8 +236,8 @@ NOTE: n is number in *each* group</code></pre>
 </div>
 <p>In 2019, <a href="https://pubmed.ncbi.nlm.nih.gov/29569719/">Lu, Qui, and Deng</a> published a paper that includes closed-form formulas for these error rates. The implementation of them is straightforward, too (and can be easily extended to unequal sample size designs):</p>
 <div class="cell">
-<details class="code-fold">
-<summary>Show code</summary>
+<details open="">
+<summary>Code</summary>
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>calculate_rates <span class="ot">=</span> <span class="cf">function</span>(delta, sd, n) {</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="co"># delta - effect size (MDE)</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="co"># sd - baseline standard deviation</span></span>
@@ -278,8 +264,8 @@ NOTE: n is number in *each* group</code></pre>
 </div>
 <p>We can verify that we get the same results:</p>
 <div class="cell">
-<details class="code-fold">
-<summary>Show code</summary>
+<details open="">
+<summary>Code</summary>
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>closed_form <span class="ot">=</span> <span class="fu">calculate_rates</span>(<span class="at">delta=</span>delta, <span class="at">sd=</span><span class="fu">sqrt</span>(baseline_var), <span class="at">n =</span> n_group) <span class="sc">|&gt;</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">as_tibble</span>() <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">method =</span> <span class="st">'Closed-form formula'</span>)</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -287,7 +273,6 @@ NOTE: n is number in *each* group</code></pre>
 <span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption =</span> <span class="st">'Estimated Metrics'</span>) <span class="sc">|&gt;</span> <span class="fu">kable_styling</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div>
 <table class="table table-sm table-striped small" data-quarto-postprocess="true">
 <caption>Estimated Metrics</caption>
 <thead>
@@ -302,13 +287,13 @@ NOTE: n is number in *each* group</code></pre>
 <tr class="odd">
 <td style="text-align: right;">0.3081444</td>
 <td style="text-align: right;">0.0010259</td>
-<td style="text-align: right;">1.797852</td>
+<td style="text-align: right;">1.78223</td>
 <td style="text-align: left;">Gelman/Carlin simulation</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">0.3082085</td>
 <td style="text-align: right;">0.0010230</td>
-<td style="text-align: right;">1.783210</td>
+<td style="text-align: right;">1.78321</td>
 <td style="text-align: left;">Closed-form formula</td>
 </tr>
 </tbody>
@@ -317,14 +302,13 @@ NOTE: n is number in *each* group</code></pre>
 
 </div>
 </div>
-</div>
 <p>Finally, we can verify that all these formulas are correct with a small simulation. In this simulation, we repeat the same experiment with the above parameters many times and estimate empirical error rate estimates.</p>
 <div class="cell">
-<details class="code-fold">
-<summary>Show code</summary>
+<details open="">
+<summary>Code</summary>
 <div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">pboptions</span>(<span class="at">type=</span><span class="st">"none"</span>)</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>sim_results <span class="ot">=</span> <span class="fu">pbsapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">10000</span>, <span class="cf">function</span>(i) {</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">set.seed</span>(i<span class="sc">*</span><span class="dv">42</span>)</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">set.seed</span>(i<span class="sc">*</span><span class="dv">24</span>)</span>
 <span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  A <span class="ot">=</span> <span class="fu">rbinom</span>(n_group, <span class="dv">1</span>, baseline)</span>
 <span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  B <span class="ot">=</span> <span class="fu">rbinom</span>(n_group, <span class="dv">1</span>, baseline <span class="sc">+</span> delta)</span>
 <span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  mean_diff <span class="ot">=</span> <span class="fu">mean</span>(B) <span class="sc">-</span> <span class="fu">mean</span>(A)</span>
@@ -350,7 +334,6 @@ NOTE: n is number in *each* group</code></pre>
 <span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption =</span> <span class="st">'Estimated Metrics'</span>) <span class="sc">|&gt;</span> <span class="fu">kable_styling</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div>
 <table class="table table-sm table-striped small" data-quarto-postprocess="true">
 <caption>Estimated Metrics</caption>
 <thead>
@@ -365,7 +348,7 @@ NOTE: n is number in *each* group</code></pre>
 <tr class="odd">
 <td style="text-align: right;">0.3081444</td>
 <td style="text-align: right;">0.0010259</td>
-<td style="text-align: right;">1.797852</td>
+<td style="text-align: right;">1.782230</td>
 <td style="text-align: left;">Gelman/Carlin simulation</td>
 </tr>
 <tr class="even">
@@ -375,9 +358,9 @@ NOTE: n is number in *each* group</code></pre>
 <td style="text-align: left;">Closed-form formula</td>
 </tr>
 <tr class="odd">
-<td style="text-align: right;">0.3025000</td>
-<td style="text-align: right;">0.0009917</td>
-<td style="text-align: right;">1.783939</td>
+<td style="text-align: right;">0.3043000</td>
+<td style="text-align: right;">0.0016431</td>
+<td style="text-align: right;">1.799376</td>
 <td style="text-align: left;">Empirical results</td>
 </tr>
 </tbody>
@@ -386,14 +369,13 @@ NOTE: n is number in *each* group</code></pre>
 
 </div>
 </div>
-</div>
 </section>
 </section>
 <section id="quantifying-decision-making-risk-with-type-s-and-m-error-rates-in-a-single-experiment" class="level2">
 <h2 class="anchored" data-anchor-id="quantifying-decision-making-risk-with-type-s-and-m-error-rates-in-a-single-experiment">Quantifying decision-making risk with Type S and M error rates in a single experiment</h2>
 <p>Lu, Qiu, and Deng’s paper includes a few charts that I replicate below as they are excellent illustrations of the risk associated with Type S and M error rates. On the x-axis, we plot statistical power, and on the y-axis - Type S error rate / Type M ratio:</p>
 <div class="cell">
-<details class="code-fold">
+<details>
 <summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>error_rates <span class="ot">=</span> <span class="fu">lapply</span>(<span class="fu">seq</span>(<span class="dv">500</span>, <span class="dv">40000</span>, <span class="dv">500</span>), <span class="cf">function</span>(n) {</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">calculate_rates</span>(delta, <span class="fu">sqrt</span>(baseline_var), n)</span>
@@ -411,33 +393,165 @@ NOTE: n is number in *each* group</code></pre>
 <span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="stat_guarantees_files/figure-html/unnamed-chunk-8-1.png" class="img-fluid figure-img" width="672"></p>
-</figure>
-</div>
+<p><img src="stat_guarantees_files/figure-html/unnamed-chunk-8-1.png" class="img-fluid" width="768"></p>
 </div>
 </div>
 <p>We can see that Type S error (which is really bad, decision-making-wise!) largely disappears once we hit power of &nbsp;0.35−0.4. On the other hand, the type M ratio only goes below 1.5x once we achieve the statistical power of <span class="math inline">\(0.5\)</span>. If this does not illustrate the issues with underpowered experiments, I don’t know what does!</p>
 </section>
-<section id="estimating-long-term-error-rates" class="level2">
-<h2 class="anchored" data-anchor-id="estimating-long-term-error-rates">Estimating long-term error rates</h2>
+<section id="from-type-iims-errors-to-long-term-error-rates" class="level2">
+<h2 class="anchored" data-anchor-id="from-type-iims-errors-to-long-term-error-rates">From Type II/M/S errors to long-term error rates</h2>
 <p><img src="gohanks.jpg" class="img-fluid"></p>
 <p>In my opinion, Type S and M error rates are much more helpful than pure Type I and II errors. However, just like Type II errors, they are not long-term error rates unless we assume we will perfectly set the MDE to the actual effect size in each experiment. If we could do that, we would not need to run experiments!</p>
-<p>We could skirt around this issue by reframing error rates to focus on limits/margins, similar how it’s done with MDE. However, a statement “we have at most <em>X%</em> risk of sign error when we detect statistically significant results and the underlying effect size is at least <em>Y</em>” feels not very satisfactory. Can we do better?</p>
-<p>We can, but it requires an additional assumption (no free lunch, as always!). We can borrow an idea from Bayesian statistics and assume a distribution of likely effect sizes (a.k.a. prior distribution) instead of just working with fixed guesses.</p>
-<p>Suppose we believe our average treatment effect is <span class="math inline">\(0.015\)</span>. In a standard setting, we may choose to use it as an MDE. We could estimate the sample size required to achieve 80% power and a <span class="math inline">\(17\%\)</span> conversion baseline - that’s about 10,200 observations per group.</p>
+<p>We could skirt around this issue by reframing error rates to focus on limits/margins, similar to how it’s done with MDE. However, a statement like “we have at most X% risk of sign error when we detect statistically significant results and the underlying effect size is at least Y” does not feel very satisfactory.</p>
+<p>Can we do better?</p>
+<p>We can, but it requires an additional assumption (there is no free lunch, as always!). We’ll borrow an idea from Bayesian statistics: instead of working with fixed values, we can assume a distribution of likely effect sizes (a.k.a. prior distribution)and then integrate over that distribution to get expected error rates.</p>
+<section id="some-potential-effect-size-distributions" class="level3">
+<h3 class="anchored" data-anchor-id="some-potential-effect-size-distributions">Some potential effect size distributions</h3>
+<p>How do we select potential treatment size distributions? It’s subjective and depends on what you believe! I will use four hypothetical cases:</p>
+<ul>
+<li><p><strong>Typical team</strong>. On average, it achieves a <span class="math inline">\(1.5\)</span> percentage point improvement in a metric of interest. The team is as likely to ship experiments that deviate positively from the average as they do negatively, with ~15% of experiments resulting in adverse impact and most experiments falling within <span class="math inline">\(0-4.5\)</span> percentage point improvements.</p></li>
+<li><p><strong>Downside-protected team.</strong> This team ships experiments with the same average impact, but the distribution is not symmetric. There is a longer tail of positive effects and no situations where experiments do extremely poorly (because of safeguards such as dogfooding, UXR, etc.).</p></li>
+<li><p><strong>Fifty-fifty team.</strong> This team ships experiments with the same variance as the typical team, but their win rate is just 50/50.</p></li>
+<li><p><strong>Golden team.</strong> A team that’s hard to beat - they primarily ship winning experiments, and some of them reach up to <span class="math inline">\(5\)</span> percentage point improvements.</p></li>
+</ul>
 <div class="cell">
-<details class="code-fold">
+<details>
 <summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>avg_treatment_effect <span class="ot">=</span> <span class="fl">0.015</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>required_sample_size <span class="ot">=</span> <span class="fu">ceiling</span>(<span class="fu">power.prop.test</span>(</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">p1=</span>baseline, </span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">p2=</span>baseline <span class="sc">+</span> avg_treatment_effect, </span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">power=</span><span class="fl">0.8</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>)<span class="sc">$</span>n)</span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>required_sample_size</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>sd_treatment_effect <span class="ot">=</span> <span class="fl">0.014</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>eff_size_distrs <span class="ot">=</span> <span class="fu">list</span>(</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">'Typical team'</span>,</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">distr =</span> <span class="st">'N(0.015, 0.014)'</span>,</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">generator =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, avg_treatment_effect, sd_treatment_effect),</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">density =</span> <span class="cf">function</span>(x) <span class="fu">dnorm</span>(x, <span class="at">mean =</span> avg_treatment_effect, <span class="at">sd =</span> sd_treatment_effect) </span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">'Fifty-fifty team'</span>,</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">distr =</span> <span class="st">'N(0, 0.014)'</span>,</span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">generator =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="dv">0</span>, sd_treatment_effect),</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">density =</span> <span class="cf">function</span>(x) <span class="fu">dnorm</span>(x, <span class="at">mean =</span> <span class="dv">0</span>, <span class="at">sd =</span> sd_treatment_effect) </span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">'Downside-protected team'</span>,</span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">distr =</span> <span class="st">'shifted/scaled Gamma(2,2))'</span>,</span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">generator =</span> <span class="cf">function</span>() <span class="fu">rgamma</span>(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">2</span>) <span class="sc">/</span> <span class="dv">50</span> <span class="sc">-</span> <span class="dv">1</span><span class="sc">/</span><span class="dv">50</span> <span class="sc">+</span> avg_treatment_effect,</span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>    <span class="at">density =</span> <span class="cf">function</span>(x) <span class="fu">dgamma</span>((x <span class="sc">-</span> avg_treatment_effect <span class="sc">+</span> <span class="dv">1</span><span class="sc">/</span><span class="dv">50</span>) <span class="sc">*</span> <span class="dv">50</span>, <span class="dv">2</span>, <span class="dv">2</span>) <span class="sc">*</span> <span class="dv">50</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">'Golden team'</span>,</span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">distr =</span> <span class="st">'shifted/scaled Gamma(3,2)'</span>,</span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>    <span class="at">generator =</span> <span class="cf">function</span>() <span class="fu">rgamma</span>(<span class="dv">1</span>, <span class="dv">3</span>, <span class="dv">2</span>) <span class="sc">/</span> <span class="dv">50</span> <span class="sc">-</span> <span class="dv">1</span><span class="sc">/</span><span class="dv">50</span> <span class="sc">+</span> avg_treatment_effect,</span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a>    <span class="at">density =</span> <span class="cf">function</span>(x) <span class="fu">dgamma</span>((x <span class="sc">-</span> avg_treatment_effect <span class="sc">+</span> <span class="dv">1</span><span class="sc">/</span><span class="dv">50</span>) <span class="sc">*</span> <span class="dv">50</span>, <span class="dv">3</span>, <span class="dv">2</span>) <span class="sc">*</span> <span class="dv">50</span></span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a>  ) </span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a>emp <span class="ot">=</span> <span class="fu">lapply</span>(</span>
+<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a>  eff_size_distrs,</span>
+<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a>  <span class="cf">function</span>(d) {</span>
+<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a>    r <span class="ot">=</span> <span class="fu">list</span>()</span>
+<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a>    r[[d<span class="sc">$</span>name]] <span class="ot">=</span> <span class="fu">sapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">50000</span>, <span class="cf">function</span>(i) d<span class="sc">$</span><span class="fu">generator</span>())</span>
+<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a>    r</span>
+<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span> <span class="fu">bind_cols</span>() <span class="sc">|&gt;</span> <span class="fu">pivot_longer</span>(<span class="fu">everything</span>(), <span class="at">names_to =</span> <span class="st">"Assumed distribution"</span>)</span>
+<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-40"><a href="#cb9-40" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(emp) <span class="sc">+</span> </span>
+<span id="cb9-41"><a href="#cb9-41" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_density</span>(<span class="fu">aes</span>(<span class="at">x=</span>value, <span class="at">color=</span><span class="st">`</span><span class="at">Assumed distribution</span><span class="st">`</span>)) <span class="sc">+</span></span>
+<span id="cb9-42"><a href="#cb9-42" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sapply</span>(</span>
+<span id="cb9-43"><a href="#cb9-43" aria-hidden="true" tabindex="-1"></a>  eff_size_distrs, </span>
+<span id="cb9-44"><a href="#cb9-44" aria-hidden="true" tabindex="-1"></a>  <span class="cf">function</span>(d) <span class="fu">stat_function</span>(</span>
+<span id="cb9-45"><a href="#cb9-45" aria-hidden="true" tabindex="-1"></a>    <span class="fu">aes</span>(<span class="at">color=</span>d<span class="sc">$</span>name, <span class="at">fill=</span>d<span class="sc">$</span>name), </span>
+<span id="cb9-46"><a href="#cb9-46" aria-hidden="true" tabindex="-1"></a>    <span class="at">fun =</span> d<span class="sc">$</span>density,</span>
+<span id="cb9-47"><a href="#cb9-47" aria-hidden="true" tabindex="-1"></a>    <span class="at">data =</span> <span class="fu">tibble</span>(<span class="at">name =</span> d<span class="sc">$</span>name, <span class="at">full_name =</span> <span class="fu">paste</span>(d<span class="sc">$</span>name, <span class="st">'~'</span>, d<span class="sc">$</span>distr)),</span>
+<span id="cb9-48"><a href="#cb9-48" aria-hidden="true" tabindex="-1"></a>    <span class="at">geom=</span><span class="st">"area"</span>,</span>
+<span id="cb9-49"><a href="#cb9-49" aria-hidden="true" tabindex="-1"></a>    <span class="at">alpha=</span><span class="fl">0.5</span></span>
+<span id="cb9-50"><a href="#cb9-50" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb9-51"><a href="#cb9-51" aria-hidden="true" tabindex="-1"></a>) <span class="sc">+</span> </span>
+<span id="cb9-52"><a href="#cb9-52" aria-hidden="true" tabindex="-1"></a>  <span class="fu">xlim</span>(<span class="sc">-</span><span class="fl">0.05</span>, <span class="fl">0.1</span>) <span class="sc">+</span> <span class="fu">labs</span>(</span>
+<span id="cb9-53"><a href="#cb9-53" aria-hidden="true" tabindex="-1"></a>    <span class="at">y=</span><span class="st">'Density'</span>,</span>
+<span id="cb9-54"><a href="#cb9-54" aria-hidden="true" tabindex="-1"></a>    <span class="at">color=</span><span class="st">'Assumed effect size distribution'</span>,</span>
+<span id="cb9-55"><a href="#cb9-55" aria-hidden="true" tabindex="-1"></a>    <span class="at">x=</span><span class="st">'Effect size'</span>,</span>
+<span id="cb9-56"><a href="#cb9-56" aria-hidden="true" tabindex="-1"></a>    <span class="at">title=</span><span class="st">'Some possible effect size assumptions'</span></span>
+<span id="cb9-57"><a href="#cb9-57" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span> </span>
+<span id="cb9-58"><a href="#cb9-58" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_light</span>() <span class="sc">+</span> </span>
+<span id="cb9-59"><a href="#cb9-59" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(</span>
+<span id="cb9-60"><a href="#cb9-60" aria-hidden="true" tabindex="-1"></a>    <span class="at">panel.grid.major =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb9-61"><a href="#cb9-61" aria-hidden="true" tabindex="-1"></a>    <span class="at">legend.position =</span> <span class="st">"none"</span></span>
+<span id="cb9-62"><a href="#cb9-62" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>full_name) <span class="sc">+</span></span>
+<span id="cb9-63"><a href="#cb9-63" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="st">'dotted'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<p><img src="stat_guarantees_files/figure-html/unnamed-chunk-9-1.png" class="img-fluid" width="768"></p>
+</div>
+<details>
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>emp <span class="sc">|&gt;</span> <span class="fu">group_by</span>(<span class="st">`</span><span class="at">Assumed distribution</span><span class="st">`</span>) <span class="sc">|&gt;</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">Avg. effect</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">mean</span>(value),</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">Q10 =</span> <span class="fu">quantile</span>(value, <span class="fl">0.1</span>),</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">Q90 =</span> <span class="fu">quantile</span>(value, <span class="fl">0.9</span>)</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span> </span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="sc">-</span><span class="st">`</span><span class="at">Avg. effect</span><span class="st">`</span>) <span class="sc">|&gt;</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption =</span> <span class="st">'Summary statistics of assumed effect size distributions'</span>) <span class="sc">|&gt;</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_styling</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<table class="table table-sm table-striped small" data-quarto-postprocess="true">
+<caption>Summary statistics of assumed effect size distributions</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">Assumed distribution</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Avg. effect</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Q10</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Q90</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Golden team</td>
+<td style="text-align: right;">0.0250048</td>
+<td style="text-align: right;">0.0058990</td>
+<td style="text-align: right;">0.0483748</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Downside-protected team</td>
+<td style="text-align: right;">0.0149691</td>
+<td style="text-align: right;">0.0003038</td>
+<td style="text-align: right;">0.0338062</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Typical team</td>
+<td style="text-align: right;">0.0149349</td>
+<td style="text-align: right;">-0.0029794</td>
+<td style="text-align: right;">0.0329643</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Fifty-fifty team</td>
+<td style="text-align: right;">-0.0000161</td>
+<td style="text-align: right;">-0.0178059</td>
+<td style="text-align: right;">0.0180195</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+</section>
+<section id="estimating-long-term-error-rates" class="level3">
+<h3 class="anchored" data-anchor-id="estimating-long-term-error-rates">Estimating long term error rates</h3>
+<p>Suppose we believe our average treatment effect is <span class="math inline">\(0.015\)</span>. In a standard setting, we may choose to use it as an MDE. We could estimate the sample size required to achieve 80% power and a <span class="math inline">\(17\%\)</span> conversion baseline - that’s about 10,200 observations per group.</p>
+<div class="cell">
+<details open="">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>required_sample_size <span class="ot">=</span> <span class="fu">ceiling</span>(<span class="fu">power.prop.test</span>(</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">p1=</span>baseline, </span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">p2=</span>baseline <span class="sc">+</span> avg_treatment_effect, </span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">power=</span><span class="fl">0.8</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>)<span class="sc">$</span>n)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>required_sample_size</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>[1] 10185</code></pre>
@@ -445,18 +559,17 @@ NOTE: n is number in *each* group</code></pre>
 </div>
 <p>We can also estimate the corresponding Type S and M error rates given this particular treatment effect and sample size:</p>
 <div class="cell">
-<details class="code-fold">
+<details>
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">calculate_rates</span>(</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">delta =</span> avg_treatment_effect, </span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">sd =</span> <span class="fu">sqrt</span>(baseline <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> baseline)),</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">n =</span> required_sample_size</span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span> <span class="fu">as_tibble</span>() <span class="sc">|&gt;</span> </span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="fu">everything</span>(), <span class="at">names_to=</span><span class="st">'Metric'</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Error rates at aa fixed effect size'</span>) <span class="sc">|&gt;</span> <span class="fu">kable_styling</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="fu">calculate_rates</span>(</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">delta =</span> avg_treatment_effect, </span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">sd =</span> <span class="fu">sqrt</span>(baseline <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> baseline)),</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">n =</span> required_sample_size</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span> <span class="fu">as_tibble</span>() <span class="sc">|&gt;</span> </span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="fu">everything</span>(), <span class="at">names_to=</span><span class="st">'Metric'</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Error rates at aa fixed effect size'</span>) <span class="sc">|&gt;</span> <span class="fu">kable_styling</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div>
 <table class="table table-sm table-striped small" data-quarto-postprocess="true">
 <caption>Error rates at aa fixed effect size</caption>
 <thead>
@@ -484,150 +597,17 @@ NOTE: n is number in *each* group</code></pre>
 
 </div>
 </div>
-</div>
-<p>To get to long-term error rates (as well as the expectation of error rates for a single experiment, if repeated infinitely), we could, for example, assume that our effect sizes are distributed as a Normal distribution with <span class="math inline">\(\mu=0.015, \sigma=0.014\)</span>. Or, perhaps a bit more realistically, we may choose a non-symmetric distribution and, keeping the same mean/standard distribution, assume that many experiments have smaller effect sizes, but there’s also a longer tail of positive effects and no situations where experiments do very badly (because of safeguards such as dogfooding, UXR, etc.).</p>
+<p>Now, let’s instead calculate our “expected detection rate” (“average power”) by integrating over the prior distributions:</p>
 <div class="cell">
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>sd_treatment_effect <span class="ot">=</span> <span class="fl">0.014</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>eff_size_distrs <span class="ot">=</span> <span class="fu">list</span>(</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">'Typical team'</span>,</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">distr =</span> <span class="st">'N(0.015, 0.014)'</span>,</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">generator =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, avg_treatment_effect, sd_treatment_effect),</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">density =</span> <span class="cf">function</span>(x) <span class="fu">dnorm</span>(x, <span class="at">mean =</span> avg_treatment_effect, <span class="at">sd =</span> sd_treatment_effect) </span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>  ),</span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">'Mediocre team'</span>,</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">distr =</span> <span class="st">'N(0, 0.014)'</span>,</span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">generator =</span> <span class="cf">function</span>() <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="dv">0</span>, sd_treatment_effect),</span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">density =</span> <span class="cf">function</span>(x) <span class="fu">dnorm</span>(x, <span class="at">mean =</span> <span class="dv">0</span>, <span class="at">sd =</span> sd_treatment_effect) </span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>  ),</span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">'Downside-protected team'</span>,</span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">distr =</span> <span class="st">'shifted/scaled Gamma(2,2))'</span>,</span>
-<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">generator =</span> <span class="cf">function</span>() <span class="fu">rgamma</span>(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">2</span>) <span class="sc">/</span> <span class="dv">50</span> <span class="sc">-</span> <span class="dv">1</span><span class="sc">/</span><span class="dv">50</span> <span class="sc">+</span> avg_treatment_effect,</span>
-<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">density =</span> <span class="cf">function</span>(x) <span class="fu">dgamma</span>((x <span class="sc">-</span> avg_treatment_effect <span class="sc">+</span> <span class="dv">1</span><span class="sc">/</span><span class="dv">50</span>) <span class="sc">*</span> <span class="dv">50</span>, <span class="dv">2</span>, <span class="dv">2</span>) <span class="sc">*</span> <span class="dv">50</span></span>
-<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>  ),</span>
-<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
-<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">'Golden team'</span>,</span>
-<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">distr =</span> <span class="st">'shifted/scaled Gamma(3,2)'</span>,</span>
-<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">generator =</span> <span class="cf">function</span>() <span class="fu">rgamma</span>(<span class="dv">1</span>, <span class="dv">3</span>, <span class="dv">2</span>) <span class="sc">/</span> <span class="dv">50</span> <span class="sc">-</span> <span class="dv">1</span><span class="sc">/</span><span class="dv">50</span> <span class="sc">+</span> avg_treatment_effect,</span>
-<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>    <span class="at">density =</span> <span class="cf">function</span>(x) <span class="fu">dgamma</span>((x <span class="sc">-</span> avg_treatment_effect <span class="sc">+</span> <span class="dv">1</span><span class="sc">/</span><span class="dv">50</span>) <span class="sc">*</span> <span class="dv">50</span>, <span class="dv">3</span>, <span class="dv">2</span>) <span class="sc">*</span> <span class="dv">50</span></span>
-<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>  ) </span>
-<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>emp <span class="ot">=</span> <span class="fu">lapply</span>(</span>
-<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a>  eff_size_distrs,</span>
-<span id="cb12-32"><a href="#cb12-32" aria-hidden="true" tabindex="-1"></a>  <span class="cf">function</span>(d) {</span>
-<span id="cb12-33"><a href="#cb12-33" aria-hidden="true" tabindex="-1"></a>    r <span class="ot">=</span> <span class="fu">list</span>()</span>
-<span id="cb12-34"><a href="#cb12-34" aria-hidden="true" tabindex="-1"></a>    r[[d<span class="sc">$</span>name]] <span class="ot">=</span> <span class="fu">sapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">50000</span>, <span class="cf">function</span>(i) d<span class="sc">$</span><span class="fu">generator</span>())</span>
-<span id="cb12-35"><a href="#cb12-35" aria-hidden="true" tabindex="-1"></a>    r</span>
-<span id="cb12-36"><a href="#cb12-36" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb12-37"><a href="#cb12-37" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span> <span class="fu">bind_cols</span>() <span class="sc">|&gt;</span> <span class="fu">pivot_longer</span>(<span class="fu">everything</span>(), <span class="at">names_to =</span> <span class="st">"Assumed distribution"</span>)</span>
-<span id="cb12-38"><a href="#cb12-38" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-39"><a href="#cb12-39" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(emp) <span class="sc">+</span> </span>
-<span id="cb12-40"><a href="#cb12-40" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_density</span>(<span class="fu">aes</span>(<span class="at">x=</span>value, <span class="at">color=</span><span class="st">`</span><span class="at">Assumed distribution</span><span class="st">`</span>)) <span class="sc">+</span></span>
-<span id="cb12-41"><a href="#cb12-41" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sapply</span>(</span>
-<span id="cb12-42"><a href="#cb12-42" aria-hidden="true" tabindex="-1"></a>  eff_size_distrs, </span>
-<span id="cb12-43"><a href="#cb12-43" aria-hidden="true" tabindex="-1"></a>  <span class="cf">function</span>(d) <span class="fu">stat_function</span>(</span>
-<span id="cb12-44"><a href="#cb12-44" aria-hidden="true" tabindex="-1"></a>    <span class="fu">aes</span>(<span class="at">color=</span>d<span class="sc">$</span>name, <span class="at">fill=</span>d<span class="sc">$</span>name), </span>
-<span id="cb12-45"><a href="#cb12-45" aria-hidden="true" tabindex="-1"></a>    <span class="at">fun =</span> d<span class="sc">$</span>density,</span>
-<span id="cb12-46"><a href="#cb12-46" aria-hidden="true" tabindex="-1"></a>    <span class="at">data =</span> <span class="fu">tibble</span>(<span class="at">name =</span> d<span class="sc">$</span>name, <span class="at">full_name =</span> <span class="fu">paste</span>(d<span class="sc">$</span>name, <span class="st">'~'</span>, d<span class="sc">$</span>distr)),</span>
-<span id="cb12-47"><a href="#cb12-47" aria-hidden="true" tabindex="-1"></a>    <span class="at">geom=</span><span class="st">"area"</span>,</span>
-<span id="cb12-48"><a href="#cb12-48" aria-hidden="true" tabindex="-1"></a>    <span class="at">alpha=</span><span class="fl">0.5</span></span>
-<span id="cb12-49"><a href="#cb12-49" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb12-50"><a href="#cb12-50" aria-hidden="true" tabindex="-1"></a>) <span class="sc">+</span> </span>
-<span id="cb12-51"><a href="#cb12-51" aria-hidden="true" tabindex="-1"></a>  <span class="fu">xlim</span>(<span class="sc">-</span><span class="fl">0.05</span>, <span class="fl">0.1</span>) <span class="sc">+</span> <span class="fu">labs</span>(</span>
-<span id="cb12-52"><a href="#cb12-52" aria-hidden="true" tabindex="-1"></a>    <span class="at">y=</span><span class="st">'Density'</span>,</span>
-<span id="cb12-53"><a href="#cb12-53" aria-hidden="true" tabindex="-1"></a>    <span class="at">color=</span><span class="st">'Assumed effect size distribution'</span>,</span>
-<span id="cb12-54"><a href="#cb12-54" aria-hidden="true" tabindex="-1"></a>    <span class="at">x=</span><span class="st">'Effect size'</span>,</span>
-<span id="cb12-55"><a href="#cb12-55" aria-hidden="true" tabindex="-1"></a>    <span class="at">title=</span><span class="st">'Some possible effect size assumptions'</span></span>
-<span id="cb12-56"><a href="#cb12-56" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span> </span>
-<span id="cb12-57"><a href="#cb12-57" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_light</span>() <span class="sc">+</span> </span>
-<span id="cb12-58"><a href="#cb12-58" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(</span>
-<span id="cb12-59"><a href="#cb12-59" aria-hidden="true" tabindex="-1"></a>    <span class="at">panel.grid.major =</span> <span class="fu">element_blank</span>(),</span>
-<span id="cb12-60"><a href="#cb12-60" aria-hidden="true" tabindex="-1"></a>    <span class="at">legend.position =</span> <span class="st">"none"</span></span>
-<span id="cb12-61"><a href="#cb12-61" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>full_name) <span class="sc">+</span></span>
-<span id="cb12-62"><a href="#cb12-62" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="st">'dotted'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="stat_guarantees_files/figure-html/unnamed-chunk-11-1.png" class="img-fluid figure-img" width="672"></p>
-</figure>
-</div>
-</div>
-</div>
-<div class="cell">
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>emp <span class="sc">|&gt;</span> <span class="fu">group_by</span>(<span class="st">`</span><span class="at">Assumed distribution</span><span class="st">`</span>) <span class="sc">|&gt;</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">average_treatment_effect =</span> <span class="fu">mean</span>(value),</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">Q10 =</span> <span class="fu">quantile</span>(value, <span class="fl">0.1</span>),</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">Q90 =</span> <span class="fu">quantile</span>(value, <span class="fl">0.9</span>)</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span> </span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="sc">-</span>average_treatment_effect) <span class="sc">|&gt;</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption =</span> <span class="st">'Summary statistics of assumed effect size distributions'</span>) <span class="sc">|&gt;</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_styling</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output-display">
-<div>
-<table class="table table-sm table-striped small" data-quarto-postprocess="true">
-<caption>Summary statistics of assumed effect size distributions</caption>
-<thead>
-<tr class="header">
-<th style="text-align: left;" data-quarto-table-cell-role="th">Assumed distribution</th>
-<th style="text-align: right;" data-quarto-table-cell-role="th">average_treatment_effect</th>
-<th style="text-align: right;" data-quarto-table-cell-role="th">Q10</th>
-<th style="text-align: right;" data-quarto-table-cell-role="th">Q90</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td style="text-align: left;">Golden team</td>
-<td style="text-align: right;">0.0249341</td>
-<td style="text-align: right;">0.0059542</td>
-<td style="text-align: right;">0.0480357</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">Downside-protected team</td>
-<td style="text-align: right;">0.0150336</td>
-<td style="text-align: right;">0.0003612</td>
-<td style="text-align: right;">0.0339851</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">Typical team</td>
-<td style="text-align: right;">0.0149760</td>
-<td style="text-align: right;">-0.0029897</td>
-<td style="text-align: right;">0.0330072</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">Mediocre team</td>
-<td style="text-align: right;">0.0000265</td>
-<td style="text-align: right;">-0.0179800</td>
-<td style="text-align: right;">0.0179733</td>
-</tr>
-</tbody>
-</table>
-
-
-</div>
-</div>
-</div>
-<p>How do we calculate, say, power over a distribution of possible effect sizes? It’s actually pretty simple - we integrate:</p>
-<div class="cell">
-<details class="code-fold">
-<summary>Show code</summary>
+<details open="">
+<summary>Code</summary>
 <div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>estimate_power <span class="ot">=</span> <span class="cf">function</span>(baseline, required_sample_size, density_func) {</span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">integrate</span>(<span class="cf">function</span>(x) {</span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    p <span class="ot">=</span> <span class="fu">power.prop.test</span>(</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    p <span class="ot">=</span> <span class="fu">calculate_rates</span>(</span>
 <span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>      <span class="at">n=</span>required_sample_size, </span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">p1=</span>baseline, </span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>      <span class="at">p2=</span>baseline <span class="sc">+</span> x</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">delta=</span>x,</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>      <span class="at">sd=</span><span class="fu">sqrt</span>(baseline <span class="sc">*</span> (<span class="dv">1</span><span class="sc">-</span> baseline))</span>
 <span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    )<span class="sc">$</span>power</span>
 <span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    </span>
 <span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">density_func</span>(x) <span class="sc">*</span> <span class="fu">replace_na</span>(p, <span class="dv">0</span>)</span>
@@ -642,12 +622,11 @@ NOTE: n is number in *each* group</code></pre>
 <span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>    eff_size_distrs,</span>
 <span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">function</span>(x) <span class="fu">estimate_power</span>(baseline, required_sample_size, x<span class="sc">$</span>density)</span>
 <span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span> <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Average "power" in the long run'</span>) <span class="sc">|&gt;</span> <span class="fu">kable_styling</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span> <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Long-run detection rates'</span>) <span class="sc">|&gt;</span> <span class="fu">kable_styling</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div>
 <table class="table table-sm table-striped small" data-quarto-postprocess="true">
-<caption>Average "power" in the long run</caption>
+<caption>Long-run detection rates</caption>
 <thead>
 <tr class="header">
 <th style="text-align: left;" data-quarto-table-cell-role="th">Assumed effect size distribution</th>
@@ -657,19 +636,19 @@ NOTE: n is number in *each* group</code></pre>
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">Typical team</td>
-<td style="text-align: right;">0.6629209</td>
+<td style="text-align: right;">0.6681627</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Mediocre team</td>
-<td style="text-align: right;">0.4876159</td>
+<td style="text-align: left;">Fifty-fifty team</td>
+<td style="text-align: right;">0.4903372</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">Downside-protected team</td>
-<td style="text-align: right;">0.5597323</td>
+<td style="text-align: right;">0.5667470</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">Golden team</td>
-<td style="text-align: right;">0.7860850</td>
+<td style="text-align: right;">0.7908594</td>
 </tr>
 </tbody>
 </table>
@@ -677,10 +656,14 @@ NOTE: n is number in *each* group</code></pre>
 
 </div>
 </div>
-</div>
-<p>Our “average statistical power” (i.e.&nbsp;the probability we will declare an observed difference as statistically significant given our assumptions about sample size, baseline metric value and effect size distribution) is <span class="math inline">\(66\%\)</span> under the normal/symmetric prior distribution assumption and <span class="math inline">\(56\%\)</span> if we believe the asymmetric assumption is more appropriate. Both of them are much lower than the <span class="math inline">\(80\%\)</span> that the classical MDE calculation yields - which is not unexpected, as the latter only considers effect size equal to the MDE, while prior distributions include a lot of density of smaller effect sizes.</p>
+<p>We can see that “average statistical power” (i.e.&nbsp;the probability we will declare an observed difference as statistically significant given our assumptions about sample size, baseline metric value, and effect size distribution):</p>
+<ul>
+<li><p>It is lower than the 80% that the classical MDE calculation yields — which is not unexpected, as the latter only considers effect size equal to the MDE, while prior distributions include a lot of density of smaller effect sizes.</p></li>
+<li><p>Anywhere between <span class="math inline">\(49\%\)</span> and <span class="math inline">\(79\%\)</span> - prior distribution assumption matters a lot!</p></li>
+</ul>
+<p>We can also plot expected detection rates as a function of statistical power using a fixed MDE.</p>
 <div class="cell">
-<details class="code-fold">
+<details>
 <summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>p <span class="ot">=</span> <span class="fu">seq</span>(<span class="fl">0.05</span>, <span class="fl">0.99</span>, <span class="fl">0.01</span>)</span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -701,36 +684,37 @@ NOTE: n is number in *each* group</code></pre>
 <span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(avg_p) <span class="sc">+</span> </span>
 <span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span> power, <span class="at">y=</span>v, <span class="at">color=</span>name)) <span class="sc">+</span></span>
 <span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_abline</span>(<span class="at">intercept =</span> <span class="dv">0</span>, <span class="at">slope=</span><span class="dv">1</span>, <span class="at">linetype=</span><span class="st">'dotted'</span>) <span class="sc">+</span></span>
-<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_light</span>() <span class="sc">+</span> </span>
-<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(</span>
-<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">panel.grid.major =</span> <span class="fu">element_blank</span>(),</span>
-<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">legend.position =</span> <span class="st">"right"</span></span>
-<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span> <span class="fu">labs</span>(</span>
-<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">'Power @ MDE'</span>,</span>
-<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">'Avg. expected detection rate'</span>,</span>
-<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a>    <span class="at">color =</span> <span class="st">'Assumed effect size distribution'</span>,</span>
-<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">'Long-run effect detection rates'</span></span>
-<span id="cb15-29"><a href="#cb15-29" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span> <span class="fu">ylim</span>(<span class="dv">0</span>, <span class="dv">1</span>) <span class="sc">+</span> <span class="fu">xlim</span>(<span class="dv">0</span>, <span class="dv">1</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="fl">0.8</span>, <span class="at">linetype=</span><span class="st">'dashed'</span>) <span class="sc">+</span></span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_light</span>() <span class="sc">+</span> </span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(</span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">panel.grid.major =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">legend.position =</span> <span class="st">"right"</span></span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span> <span class="fu">labs</span>(</span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">'Power @ MDE'</span>,</span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">'Avg. expected detection rate'</span>,</span>
+<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a>    <span class="at">color =</span> <span class="st">'Assumed effect size distribution'</span>,</span>
+<span id="cb15-29"><a href="#cb15-29" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">'Long-run effect detection rates'</span></span>
+<span id="cb15-30"><a href="#cb15-30" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb15-31"><a href="#cb15-31" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="fl">0.1</span>)) <span class="sc">+</span></span>
+<span id="cb15-32"><a href="#cb15-32" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="fl">0.1</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="stat_guarantees_files/figure-html/unnamed-chunk-14-1.png" class="img-fluid figure-img" width="672"></p>
-</figure>
+<p><img src="stat_guarantees_files/figure-html/unnamed-chunk-13-1.png" class="img-fluid" width="768"></p>
 </div>
 </div>
-</div>
-<p>We can do the same with Type S error and Type M error. Type S error is straightforward - we can see that, on average, the risk of sign error is <span class="math inline">\(0.2\%-0.3\%\)</span>. That is much higher than what a fixed effect size calculation suggests, but, as a long-term error rate, that’s still very low.</p>
+<p>An <a href="https://hdsr.mitpress.mit.edu/pub/aj31wj81/release/1">often-quoted</a> figure for the win rate in online experiments is <span class="math inline">\(10-20\%\)</span>. The detection rate also includes experiments with a negative impact, so it’s not a 1:1 comparison, but it seems that these prior distributions are way too optimistic! Or, alternatively, the MDEs used in practice are too high, resulting in low power.</p>
+<p>We can do the same with Type S error and Type M error. I will make one tweak to the definitions, though: instead of focusing on conditional error rates (“when the result is statistically significant, what is the probability…”), I’ll estimate the overall error rates (“out of all experiments that we run, what’s the probability that..”). I think these rates are more helpful to think about when considering long-term error rates, as they tell us probabilities of error with all experiments as the denominator. If needed, we can divide them by the average detection rate to get back to original Type S and M definitions.</p>
+<p>We can see that, on average, the risk of sign error is <span class="math inline">\(0.2\%-0.3\%\)</span>. That is much higher than what a fixed effect size calculation suggests, but, as a long-term error rate, that’s still very low.</p>
 <div class="cell">
-<details class="code-fold">
+<details>
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>estimate_typeS <span class="ot">=</span> <span class="cf">function</span>(baseline, required_sample_size, density_func) {</span>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>estimate_typeS <span class="ot">=</span> <span class="cf">function</span>(baseline, s, density_func) {</span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  </span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  baseline_sd <span class="ot">=</span> <span class="fu">sqrt</span>(baseline <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> baseline))</span>
 <span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">integrate</span>(<span class="cf">function</span>(x) {</span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    r <span class="ot">=</span> <span class="fu">calculate_rates</span>(<span class="at">n=</span>required_sample_size, <span class="at">delta=</span>x, <span class="at">sd=</span>baseline_sd)</span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    r<span class="sc">$</span>typeS <span class="sc">*</span> r<span class="sc">$</span>power <span class="sc">*</span> <span class="fu">density_func</span>(x)</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    r <span class="ot">=</span> <span class="fu">calculate_rates</span>(<span class="at">n=</span>s, <span class="at">delta=</span>x, <span class="at">sd=</span>baseline_sd)</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    (r<span class="sc">$</span>typeS <span class="sc">*</span> r<span class="sc">$</span>power) <span class="sc">*</span> <span class="fu">density_func</span>(x)</span>
 <span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    </span>
 <span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>  }, <span class="sc">-</span><span class="cn">Inf</span>, <span class="cn">Inf</span>, <span class="at">stop.on.error =</span> F)<span class="sc">$</span>value</span>
 <span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a></span>
@@ -760,29 +744,35 @@ NOTE: n is number in *each* group</code></pre>
 <span id="cb16-34"><a href="#cb16-34" aria-hidden="true" tabindex="-1"></a>    <span class="at">legend.position =</span> <span class="st">"right"</span></span>
 <span id="cb16-35"><a href="#cb16-35" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span> <span class="fu">labs</span>(</span>
 <span id="cb16-36"><a href="#cb16-36" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">'Power @ MDE'</span>,</span>
-<span id="cb16-37"><a href="#cb16-37" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">'Avg. Type S error rate'</span>,</span>
+<span id="cb16-37"><a href="#cb16-37" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">'Error rate'</span>,</span>
 <span id="cb16-38"><a href="#cb16-38" aria-hidden="true" tabindex="-1"></a>    <span class="at">color =</span> <span class="st">'Assumed effect size distribution'</span>,</span>
 <span id="cb16-39"><a href="#cb16-39" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">'Long-run sign error rates'</span></span>
-<span id="cb16-40"><a href="#cb16-40" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb16-40"><a href="#cb16-40" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb16-41"><a href="#cb16-41" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="fl">0.8</span>, <span class="at">linetype=</span><span class="st">'dashed'</span>) <span class="sc">+</span></span>
+<span id="cb16-42"><a href="#cb16-42" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="fl">0.1</span>)) <span class="sc">+</span></span>
+<span id="cb16-43"><a href="#cb16-43" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">breaks=</span><span class="fu">seq</span>(<span class="dv">0</span>, <span class="fl">0.015</span>, <span class="fl">0.002</span>)) <span class="sc">+</span></span>
+<span id="cb16-44"><a href="#cb16-44" aria-hidden="true" tabindex="-1"></a>  <span class="cn">NULL</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="stat_guarantees_files/figure-html/unnamed-chunk-15-1.png" class="img-fluid figure-img" width="672"></p>
-</figure>
+<p><img src="stat_guarantees_files/figure-html/unnamed-chunk-14-1.png" class="img-fluid" width="768"></p>
 </div>
 </div>
-</div>
+<p>Type M is a bit trickier because it’s a ratio, and integrating it at small effect sizes is challenging as the ratio’s denominator approaches zero. Instead of estimating the “average Type M ratio”, I will estimate “average absolute exaggeration”. That is:</p>
+<p><span class="math display">\[
+\text{Absolute exaggeration} = | \text{true effect size} - \text{observed effect size} | \text{ if results are statistically significant, else 0}
+\]</span></p>
+<p>We can see that it works out to be <span class="math inline">\(~0.1\)</span> percentage point at power of <span class="math inline">\(80\%\)</span> (using MDE of <span class="math inline">\(1.5\%\)</span>).</p>
+<p>This approach, by the way, gets us quite close to expected loss metric used in Bayesian A/B testing, where instead of just capturing the cost of an error as a binary one (like we did above with power or sign error), we capture the magnitude of it, too (a sign error on an estimated effect size of <span class="math inline">\(5\)</span> percentage point is not the same as one on an effect size of <span class="math inline">\(0.5\)</span> percentage point!). But that’s for a future blog post.</p>
 <div class="cell">
-<details class="code-fold">
+<details>
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>estimate_typeM <span class="ot">=</span> <span class="cf">function</span>(baseline, required_sample_size, density_func) {</span>
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>estimate_typeM <span class="ot">=</span> <span class="cf">function</span>(baseline, s, density_func) {</span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>  </span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>  baseline_sd <span class="ot">=</span> <span class="fu">sqrt</span>(baseline <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> baseline))</span>
 <span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">integrate</span>(<span class="cf">function</span>(x) {</span>
-<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    r <span class="ot">=</span> <span class="fu">calculate_rates</span>(<span class="at">n=</span>required_sample_size, <span class="at">delta=</span>x, <span class="at">sd=</span>baseline_sd)</span>
-<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    (r<span class="sc">$</span>typeM <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">*</span> r<span class="sc">$</span>power <span class="sc">*</span> <span class="fu">density_func</span>(x) <span class="sc">*</span> <span class="fu">abs</span>(x)</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    r <span class="ot">=</span> <span class="fu">calculate_rates</span>(<span class="at">n=</span>s, <span class="at">delta=</span>x, <span class="at">sd=</span>baseline_sd)</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    (r<span class="sc">$</span>typeM <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">*</span> <span class="fu">density_func</span>(x) <span class="sc">*</span> <span class="fu">abs</span>(x) <span class="sc">*</span> r<span class="sc">$</span>power</span>
 <span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>    </span>
 <span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>  }, <span class="sc">-</span><span class="cn">Inf</span>, <span class="cn">Inf</span>, <span class="at">stop.on.error =</span> F)<span class="sc">$</span>value</span>
 <span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a></span>
@@ -812,17 +802,222 @@ NOTE: n is number in *each* group</code></pre>
 <span id="cb17-34"><a href="#cb17-34" aria-hidden="true" tabindex="-1"></a>    <span class="at">legend.position =</span> <span class="st">"right"</span></span>
 <span id="cb17-35"><a href="#cb17-35" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span> <span class="fu">labs</span>(</span>
 <span id="cb17-36"><a href="#cb17-36" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">'Power @ MDE'</span>,</span>
-<span id="cb17-37"><a href="#cb17-37" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">'Avg. Type S error rate'</span>,</span>
+<span id="cb17-37"><a href="#cb17-37" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">'Avg. absolute exaggeration'</span>,</span>
 <span id="cb17-38"><a href="#cb17-38" aria-hidden="true" tabindex="-1"></a>    <span class="at">color =</span> <span class="st">'Assumed effect size distribution'</span>,</span>
-<span id="cb17-39"><a href="#cb17-39" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">'Long-run sign error rates'</span></span>
-<span id="cb17-40"><a href="#cb17-40" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb17-39"><a href="#cb17-39" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">'Long-run exaggeration rates'</span></span>
+<span id="cb17-40"><a href="#cb17-40" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span> </span>
+<span id="cb17-41"><a href="#cb17-41" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="fl">0.8</span>, <span class="at">linetype=</span><span class="st">'dashed'</span>) <span class="sc">+</span></span>
+<span id="cb17-42"><a href="#cb17-42" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="fl">0.1</span>)) <span class="sc">+</span></span>
+<span id="cb17-43"><a href="#cb17-43" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">breaks=</span><span class="fu">seq</span>(<span class="dv">0</span>, <span class="fl">0.01</span>, <span class="fl">0.001</span>)) <span class="sc">+</span></span>
+<span id="cb17-44"><a href="#cb17-44" aria-hidden="true" tabindex="-1"></a>  <span class="cn">NULL</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="stat_guarantees_files/figure-html/unnamed-chunk-16-1.png" class="img-fluid figure-img" width="672"></p>
-</figure>
+<p><img src="stat_guarantees_files/figure-html/unnamed-chunk-15-1.png" class="img-fluid" width="768"></p>
 </div>
+</div>
+<p>And that’s it. All that’s left is to come up with prior distributions, MDE, and estimate long-term error rates on your own. I made a small Streamlit app just for that.</p>
+</section>
+</section>
+<section id="appendix---i-dont-trust-the-maths" class="level2">
+<h2 class="anchored" data-anchor-id="appendix---i-dont-trust-the-maths">Appendix - I don’t trust the maths</h2>
+<p>Me neither. So I ran another simulation just to double check - looks like it all adds up. Exaggeration ratios are a bit off, but I suspect that differences arise from numerical approximations in integration.</p>
+<div class="cell">
+<details>
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>num_experiments <span class="ot">=</span> <span class="dv">100000</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>used_sample_size <span class="ot">=</span> <span class="fu">floor</span>(<span class="fu">power.prop.test</span>(</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">p1=</span>baseline, </span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">p2=</span>baseline <span class="sc">+</span> <span class="fl">0.015</span>,</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">power=</span><span class="fl">0.2</span>)<span class="sc">$</span>n)</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>appendix_sim <span class="ot">=</span> <span class="fu">pblapply</span>(eff_size_distrs, <span class="cf">function</span>(d) {</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>  drawn_effect_sizes <span class="ot">=</span> <span class="fu">sapply</span>(</span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    <span class="dv">1</span><span class="sc">:</span>num_experiments, </span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">function</span>(i) d<span class="sc">$</span><span class="fu">generator</span>()</span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>  exp_results <span class="ot">=</span> <span class="fu">tibble</span>(</span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">eff_size =</span> drawn_effect_sizes,</span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">converted_A =</span> <span class="fu">rbinom</span>(</span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>      num_experiments, </span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>      used_sample_size, </span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>      baseline</span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">converted_B =</span> <span class="fu">rbinom</span>(</span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a>      num_experiments, </span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>      used_sample_size, </span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>      baseline <span class="sc">+</span> drawn_effect_sizes</span>
+<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a>  )<span class="sc">|&gt;</span> <span class="fu">mutate</span>(</span>
+<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a>    <span class="at">conv_rate_A =</span> converted_A <span class="sc">/</span> used_sample_size,</span>
+<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>    <span class="at">conv_rate_B =</span> converted_B <span class="sc">/</span> used_sample_size,</span>
+<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span> <span class="fu">mutate</span>(</span>
+<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a>    <span class="at">mean_diff =</span> conv_rate_B <span class="sc">-</span> conv_rate_A,</span>
+<span id="cb18-33"><a href="#cb18-33" aria-hidden="true" tabindex="-1"></a>    <span class="at">st_error =</span> <span class="fu">sqrt</span>(</span>
+<span id="cb18-34"><a href="#cb18-34" aria-hidden="true" tabindex="-1"></a>      (conv_rate_A <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> conv_rate_A) <span class="sc">/</span> used_sample_size) <span class="sc">+</span></span>
+<span id="cb18-35"><a href="#cb18-35" aria-hidden="true" tabindex="-1"></a>      (conv_rate_B <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> conv_rate_B) <span class="sc">/</span> used_sample_size)</span>
+<span id="cb18-36"><a href="#cb18-36" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb18-37"><a href="#cb18-37" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb18-38"><a href="#cb18-38" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(</span>
+<span id="cb18-39"><a href="#cb18-39" aria-hidden="true" tabindex="-1"></a>      <span class="at">is_stat_sig =</span> <span class="fu">abs</span>(mean_diff <span class="sc">/</span> st_error) <span class="sc">&gt;=</span> <span class="fu">qnorm</span>(<span class="fl">0.975</span>)</span>
+<span id="cb18-40"><a href="#cb18-40" aria-hidden="true" tabindex="-1"></a>    ) <span class="sc">|&gt;</span> <span class="fu">mutate</span>(</span>
+<span id="cb18-41"><a href="#cb18-41" aria-hidden="true" tabindex="-1"></a>      <span class="at">sign_error =</span> <span class="fu">if_else</span>(</span>
+<span id="cb18-42"><a href="#cb18-42" aria-hidden="true" tabindex="-1"></a>        is_stat_sig, </span>
+<span id="cb18-43"><a href="#cb18-43" aria-hidden="true" tabindex="-1"></a>        <span class="fu">sign</span>(mean_diff) <span class="sc">!=</span> <span class="fu">sign</span>(drawn_effect_sizes), </span>
+<span id="cb18-44"><a href="#cb18-44" aria-hidden="true" tabindex="-1"></a>        <span class="cn">NA</span></span>
+<span id="cb18-45"><a href="#cb18-45" aria-hidden="true" tabindex="-1"></a>      ),</span>
+<span id="cb18-46"><a href="#cb18-46" aria-hidden="true" tabindex="-1"></a>      <span class="at">exaggeration =</span> <span class="fu">if_else</span>(is_stat_sig, <span class="fu">abs</span>(mean_diff <span class="sc">-</span> drawn_effect_sizes), <span class="cn">NA</span>)</span>
+<span id="cb18-47"><a href="#cb18-47" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb18-48"><a href="#cb18-48" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb18-49"><a href="#cb18-49" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb18-50"><a href="#cb18-50" aria-hidden="true" tabindex="-1"></a>  exp_results <span class="sc">|&gt;</span> <span class="fu">summarize</span>(</span>
+<span id="cb18-51"><a href="#cb18-51" aria-hidden="true" tabindex="-1"></a>    <span class="at">distribution =</span> d<span class="sc">$</span>name,</span>
+<span id="cb18-52"><a href="#cb18-52" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_power =</span> <span class="fu">mean</span>(is_stat_sig),</span>
+<span id="cb18-53"><a href="#cb18-53" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_sign_error =</span> <span class="fu">mean</span>(<span class="fu">replace_na</span>(sign_error, F)),</span>
+<span id="cb18-54"><a href="#cb18-54" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_exaggeration =</span> <span class="fu">mean</span>(<span class="fu">replace_na</span>(exaggeration, <span class="dv">0</span>)),</span>
+<span id="cb18-55"><a href="#cb18-55" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_TypeS =</span> <span class="fu">mean</span>(sign_error, <span class="at">na.rm=</span>T),</span>
+<span id="cb18-56"><a href="#cb18-56" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_conditional_exaggeration =</span> <span class="fu">mean</span>(exaggeration, <span class="at">na.rm=</span>T)</span>
+<span id="cb18-57"><a href="#cb18-57" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb18-58"><a href="#cb18-58" aria-hidden="true" tabindex="-1"></a>}) <span class="sc">|&gt;</span> <span class="fu">bind_rows</span>()</span>
+<span id="cb18-59"><a href="#cb18-59" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-60"><a href="#cb18-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-61"><a href="#cb18-61" aria-hidden="true" tabindex="-1"></a>appendix_sim <span class="sc">|&gt;</span> </span>
+<span id="cb18-62"><a href="#cb18-62" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Simulation results using N = 20% power at MDE of 0.015'</span>, <span class="at">digits=</span><span class="dv">4</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb18-63"><a href="#cb18-63" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_styling</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<table class="table table-sm table-striped small" data-quarto-postprocess="true">
+<caption>Simulation results using N = 20% power at MDE of 0.015</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">distribution</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">avg_power</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">avg_sign_error</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">avg_exaggeration</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">avg_TypeS</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">avg_conditional_exaggeration</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Typical team</td>
+<td style="text-align: right;">0.2927</td>
+<td style="text-align: right;">0.0041</td>
+<td style="text-align: right;">0.0039</td>
+<td style="text-align: right;">0.0140</td>
+<td style="text-align: right;">0.0134</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Fifty-fifty team</td>
+<td style="text-align: right;">0.1805</td>
+<td style="text-align: right;">0.0066</td>
+<td style="text-align: right;">0.0030</td>
+<td style="text-align: right;">0.0364</td>
+<td style="text-align: right;">0.0167</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Downside-protected team</td>
+<td style="text-align: right;">0.2602</td>
+<td style="text-align: right;">0.0059</td>
+<td style="text-align: right;">0.0037</td>
+<td style="text-align: right;">0.0226</td>
+<td style="text-align: right;">0.0141</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Golden team</td>
+<td style="text-align: right;">0.4375</td>
+<td style="text-align: right;">0.0024</td>
+<td style="text-align: right;">0.0052</td>
+<td style="text-align: right;">0.0055</td>
+<td style="text-align: right;">0.0118</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+<details>
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">lapply</span>(eff_size_distrs, <span class="cf">function</span>(d) {</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">distribution =</span> d<span class="sc">$</span>name,</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_power =</span> <span class="fu">estimate_power</span>(</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>      <span class="at">baseline =</span> baseline, </span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">required_sample_size =</span> used_sample_size, </span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>      <span class="at">density_func =</span> d<span class="sc">$</span>density</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_sign_error =</span> <span class="fu">estimate_typeS</span>(</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>      <span class="at">baseline =</span> baseline, </span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>      <span class="at">s =</span> used_sample_size, </span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>      <span class="at">density_func =</span> d<span class="sc">$</span>density</span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_exaggeration =</span> <span class="fu">estimate_typeM</span>(</span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a>      <span class="at">baseline =</span> baseline, </span>
+<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a>      <span class="at">s =</span> used_sample_size, </span>
+<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a>      <span class="at">density_func =</span> d<span class="sc">$</span>density</span>
+<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb19-19"><a href="#cb19-19" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb19-20"><a href="#cb19-20" aria-hidden="true" tabindex="-1"></a>}) <span class="sc">|&gt;</span> <span class="fu">bind_rows</span>() <span class="sc">|&gt;</span> </span>
+<span id="cb19-21"><a href="#cb19-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb19-22"><a href="#cb19-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_TypeS =</span> avg_sign_error <span class="sc">/</span> avg_power,</span>
+<span id="cb19-23"><a href="#cb19-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_conditional_exaggeration =</span> avg_exaggeration <span class="sc">/</span> avg_power</span>
+<span id="cb19-24"><a href="#cb19-24" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb19-25"><a href="#cb19-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kbl</span>(<span class="at">caption=</span><span class="st">'Integration results with equivalent parameters'</span>, <span class="at">digits=</span><span class="dv">4</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb19-26"><a href="#cb19-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_styling</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<table class="table table-sm table-striped small" data-quarto-postprocess="true">
+<caption>Integration results with equivalent parameters</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">distribution</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">avg_power</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">avg_sign_error</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">avg_exaggeration</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">avg_TypeS</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">avg_conditional_exaggeration</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Typical team</td>
+<td style="text-align: right;">0.3033</td>
+<td style="text-align: right;">0.0040</td>
+<td style="text-align: right;">0.0034</td>
+<td style="text-align: right;">0.0132</td>
+<td style="text-align: right;">0.0113</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Fifty-fifty team</td>
+<td style="text-align: right;">0.1790</td>
+<td style="text-align: right;">0.0065</td>
+<td style="text-align: right;">0.0029</td>
+<td style="text-align: right;">0.0365</td>
+<td style="text-align: right;">0.0160</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Downside-protected team</td>
+<td style="text-align: right;">0.2678</td>
+<td style="text-align: right;">0.0060</td>
+<td style="text-align: right;">0.0030</td>
+<td style="text-align: right;">0.0223</td>
+<td style="text-align: right;">0.0110</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Golden team</td>
+<td style="text-align: right;">0.4498</td>
+<td style="text-align: right;">0.0023</td>
+<td style="text-align: right;">0.0033</td>
+<td style="text-align: right;">0.0051</td>
+<td style="text-align: right;">0.0074</td>
+</tr>
+</tbody>
+</table>
+
+
 </div>
 </div>
 </section>
@@ -908,27 +1103,10 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
     // clear code selection
     e.clearSelection();
   });
-    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
-    var mailtoRegex = new RegExp(/^mailto:/);
-      var filterRegex = new RegExp('/' + window.location.host + '/');
-    var isInternal = (href) => {
-        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
-    }
-    // Inspect non-navigation links and adorn them if external
- 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool)');
-    for (var i=0; i<links.length; i++) {
-      const link = links[i];
-      if (!isInternal(link.href)) {
-        // undo the damage that might have been done by quarto-nav.js in the case of
-        // links that we want to consider external
-        if (link.dataset.originalHref !== undefined) {
-          link.href = link.dataset.originalHref;
-        }
-      }
-    }
-  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+  function tippyHover(el, contentFn) {
     const config = {
       allowHTML: true,
+      content: contentFn,
       maxWidth: 500,
       delay: 100,
       arrow: false,
@@ -938,17 +1116,8 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       interactive: true,
       interactiveBorder: 10,
       theme: 'quarto',
-      placement: 'bottom-start',
+      placement: 'bottom-start'
     };
-    if (contentFn) {
-      config.content = contentFn;
-    }
-    if (onTriggerFn) {
-      config.onTrigger = onTriggerFn;
-    }
-    if (onUntriggerFn) {
-      config.onUntrigger = onUntriggerFn;
-    }
     window.tippy(el, config); 
   }
   const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
@@ -960,130 +1129,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       try { href = new URL(href).hash; } catch {}
       const id = href.replace(/^#\/?/, "");
       const note = window.document.getElementById(id);
-      if (note) {
-        return note.innerHTML;
-      } else {
-        return "";
-      }
-    });
-  }
-  const xrefs = window.document.querySelectorAll('a.quarto-xref');
-  const processXRef = (id, note) => {
-    // Strip column container classes
-    const stripColumnClz = (el) => {
-      el.classList.remove("page-full", "page-columns");
-      if (el.children) {
-        for (const child of el.children) {
-          stripColumnClz(child);
-        }
-      }
-    }
-    stripColumnClz(note)
-    if (id === null || id.startsWith('sec-')) {
-      // Special case sections, only their first couple elements
-      const container = document.createElement("div");
-      if (note.children && note.children.length > 2) {
-        container.appendChild(note.children[0].cloneNode(true));
-        for (let i = 1; i < note.children.length; i++) {
-          const child = note.children[i];
-          if (child.tagName === "P" && child.innerText === "") {
-            continue;
-          } else {
-            container.appendChild(child.cloneNode(true));
-            break;
-          }
-        }
-        if (window.Quarto?.typesetMath) {
-          window.Quarto.typesetMath(container);
-        }
-        return container.innerHTML
-      } else {
-        if (window.Quarto?.typesetMath) {
-          window.Quarto.typesetMath(note);
-        }
-        return note.innerHTML;
-      }
-    } else {
-      // Remove any anchor links if they are present
-      const anchorLink = note.querySelector('a.anchorjs-link');
-      if (anchorLink) {
-        anchorLink.remove();
-      }
-      if (window.Quarto?.typesetMath) {
-        window.Quarto.typesetMath(note);
-      }
-      // TODO in 1.5, we should make sure this works without a callout special case
-      if (note.classList.contains("callout")) {
-        return note.outerHTML;
-      } else {
-        return note.innerHTML;
-      }
-    }
-  }
-  for (var i=0; i<xrefs.length; i++) {
-    const xref = xrefs[i];
-    tippyHover(xref, undefined, function(instance) {
-      instance.disable();
-      let url = xref.getAttribute('href');
-      let hash = undefined; 
-      if (url.startsWith('#')) {
-        hash = url;
-      } else {
-        try { hash = new URL(url).hash; } catch {}
-      }
-      if (hash) {
-        const id = hash.replace(/^#\/?/, "");
-        const note = window.document.getElementById(id);
-        if (note !== null) {
-          try {
-            const html = processXRef(id, note.cloneNode(true));
-            instance.setContent(html);
-          } finally {
-            instance.enable();
-            instance.show();
-          }
-        } else {
-          // See if we can fetch this
-          fetch(url.split('#')[0])
-          .then(res => res.text())
-          .then(html => {
-            const parser = new DOMParser();
-            const htmlDoc = parser.parseFromString(html, "text/html");
-            const note = htmlDoc.getElementById(id);
-            if (note !== null) {
-              const html = processXRef(id, note);
-              instance.setContent(html);
-            } 
-          }).finally(() => {
-            instance.enable();
-            instance.show();
-          });
-        }
-      } else {
-        // See if we can fetch a full url (with no hash to target)
-        // This is a special case and we should probably do some content thinning / targeting
-        fetch(url)
-        .then(res => res.text())
-        .then(html => {
-          const parser = new DOMParser();
-          const htmlDoc = parser.parseFromString(html, "text/html");
-          const note = htmlDoc.querySelector('main.content');
-          if (note !== null) {
-            // This should only happen for chapter cross references
-            // (since there is no id in the URL)
-            // remove the first header
-            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
-              note.children[0].remove();
-            }
-            const html = processXRef(null, note);
-            instance.setContent(html);
-          } 
-        }).finally(() => {
-          instance.enable();
-          instance.show();
-        });
-      }
-    }, function(instance) {
+      return note.innerHTML;
     });
   }
       let selectedAnnoteEl;
@@ -1127,7 +1173,6 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
             }
             div.style.top = top - 2 + "px";
             div.style.height = height + 4 + "px";
-            div.style.left = 0;
             let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
             if (gutterDiv === null) {
               gutterDiv = window.document.createElement("div");
@@ -1153,32 +1198,6 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
         });
         selectedAnnoteEl = undefined;
       };
-        // Handle positioning of the toggle
-    window.addEventListener(
-      "resize",
-      throttle(() => {
-        elRect = undefined;
-        if (selectedAnnoteEl) {
-          selectCodeLines(selectedAnnoteEl);
-        }
-      }, 10)
-    );
-    function throttle(fn, ms) {
-    let throttle = false;
-    let timer;
-      return (...args) => {
-        if(!throttle) { // first call gets through
-            fn.apply(this, args);
-            throttle = true;
-        } else { // all the others get throttled
-            if(timer) clearTimeout(timer); // cancel #2
-            timer = setTimeout(() => {
-              fn.apply(this, args);
-              timer = throttle = false;
-            }, ms);
-        }
-      };
-    }
       // Attach click handler to the DT
       const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
       for (const annoteDlNode of annoteDls) {
@@ -1239,7 +1258,6 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 });
 </script>
 </div> <!-- /content -->
-
 
 
 
