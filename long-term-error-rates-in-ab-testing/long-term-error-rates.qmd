@@ -3,6 +3,7 @@ title: "Statistical guarantees and long-term error rates in A/B testing"
 subtitle: "Type I and II error rates don't feel satisfactory, but getting to error rates that matter require Bayesian-like assumptions"
 format: 
   html:
+    embed-resources: true
     code-fold: show
     code-summary: "Show code"
     fig-align: "center"
@@ -29,11 +30,11 @@ library(pbapply)
 
 -   You can only get to long-term error rates over series of experiments with Bayesian-like assumptions of effect size (experimental impact) distribution.
 
--   Depending on your belief of experiment impact distribution, running experiments that have $80\%$ estimated statistical power may yield very different long-term detection rates; $80\%$ detection rate is only achievable if you have a very succesful product team. Otherwise, it's easy to arrive at $50\%$ and lower detection rates.
+-   Depending on your belief of experiment impact distribution, running experiments that have $80\%$ estimated statistical power may yield very different long-term detection rates; $80\%$ detection rate is only achievable if you have a very successful product team. Otherwise, it's easy to arrive at $50\%$ and lower detection rates.
 
 -   The risk of wrong decisions (Type S error) is minimal, $0.2\% - 0.3\%$. Exageration errors are unavoidable (winner's curse phenomenon), but running experiments at $50\%$ power or more reduces their impact considerably.
 
-Here's a Streamlit app to estimate long-term error rates yourself.
+Here's a [Streamlit app](https://ab-testing-long-term-error-rates.streamlit.app/) to estimate long-term error rates yourself.
 
 ## Why Type I and Type II error rates are not enough
 
@@ -553,7 +554,7 @@ ggplot(avg_misestimate) +
 
 ```
 
-And that's it. All that's left is to come up with prior distributions, MDE, and estimate long-term error rates on your own. I made a small Streamlit app just for that.
+And that's it. All that's left is to come up with prior distributions, MDE, and estimate long-term error rates on your own. I made a small [Streamlit app](https://ab-testing-long-term-error-rates.streamlit.app/) just for that.
 
 ## Appendix - I don't trust the maths
 
