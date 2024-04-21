@@ -9,6 +9,7 @@ format:
     fig-align: "center"
     fig-height: 4
     fig-width: 8
+    page-layout: custom
 editor: visual
 ---
 
