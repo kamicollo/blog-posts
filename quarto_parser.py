@@ -36,9 +36,8 @@ with open(input_file) as f:
             style_file.writelines(s.contents)
             s.decompose()
 
-    # add styles reference to the main document
-    style_ref = document.new_tag("link", href="quarto_styles.css", rel="stylesheet")
-    document.find("head").append(style_ref)
+    # delete the title
+    [h.decompose() for h in document.find_all("h1")]
 
     # save cleaned document
     with open(output_folder.joinpath(input_file.name), "w") as main_file:
