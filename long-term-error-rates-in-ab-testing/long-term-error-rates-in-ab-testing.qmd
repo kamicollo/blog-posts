@@ -1,6 +1,6 @@
 ---
-title: "Statistical guarantees and long-term error rates in A/B testing"
-subtitle: "Type I and II error rates don't feel satisfactory, but getting to error rates that matter require Bayesian-like assumptions"
+title: "Estimating long-term detection, win and error rates in A/B testing"
+subtitle: "Obtaining long-term statistical guarantees requires sprinkling some Bayesian thinking on top of Type I and II errors"
 format: 
   html:
     embed-resources: true
@@ -25,9 +25,9 @@ library(pbapply)
 
 -   The "statistical guarantees" in A/B testing (Type I and II error rates) only guarantee the reproducibility of a single experiment. They are less helpful in estimating long-term error and detection rates over a series of experiments.
 
--   Type I error rate only provides guarantees for experiments with zero impact. This is not very useful in the industry setting where the null hypothesis is rarely true and small effect sizes matter (from a business perspective, they are not equivalent to zero).
+-   Null hypothesis testing only guarantees a type I error rate for experiments with zero impact. However, in the industry setting, the null hypothesis is rarely true. It's more likely that effect sizes are too small to be detected, but that is outside of type I error rate territory, making it less useful in estimating long-term error rates.
 
--   In the context of long-term error rates, Type S error (the probability of observing a result with an opposite sign than the actual effect) and Type M error (the ratio of exaggeration of observed effect vs. actual effect) are much more helpful measures than pure Type I error rates.
+-   In the context of long-term error rates, Type S error (the probability of observing a result with an opposite sign than the actual effect) and Type M error (the ratio of exaggeration of observed effect vs. actual effect) are much more helpful measures.
 
 -   Similarly, the Type II error rate only guarantees detection rates of effect sizes "at and above" a chosen threshold of effect sizes and not average detection/win rates, which are more relevant when assessing an experimentation program over time.
 
@@ -35,7 +35,7 @@ library(pbapply)
 
 -   I show how win rates of 10-20% (commonly observed in the industry) are compatible with running large-sample-size, non-zero impact experiments and what prior effect size distributions they imply.
 
--   Overall, the long-term error/detection rate framework provides an alternative view to determining experiment sample sizes. It shows that the selection of MDE (and resulting statistical power) is less important than the relationship between effect size distribution and sample sizes, hopefully paving way to more productive discussions about MDE levels that should be used in large-scale A/B testing programs.
+-   Overall, the long-term error/detection rate framework provides an alternative view to determining experiment sample sizes. Instead of solely focusing on the selection of MDE (and resulting statistical power), one can directly examine the relationship between effect size distribution, sample sizes, and the resulting detection, sign error, and exaggeration rates. Constructing such an effect size distribution may, in some situations, be easier than deciding on an (arbitrary) MDE threshold.
 
 -   I also built a [Streamlit app](https://ab-testing-long-term-error-rates.streamlit.app/) to estimate long-term error rates yourself.
 
