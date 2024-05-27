@@ -1,0 +1,40 @@
+---
+title: "Can we stop bashing bayesian methods in the context of A/B testing, please?"
+author: "Aurimas Racas"
+date: '2024-03-09'
+output: html_document
+---
+
+Bayesian vs. frequentist. "The never ending debate". Boooring. It's just maths, after all. Well, that, and the fundamental interpretation of probability. The answer to that debate is simple: an experienced data scientist / statistician should be able to use the tools from either domain, depending on the problem at hand. 
+
+I spend a lot of time with online experiments. At WW, we have our own in-house experimentation platform, but I find it helpful to keep up with the content produced by vendors in the space. And lately, I came across some gems. 
+
+Here's an opening paragraph from Optimizely blog post with a telling URL https://www.optimizely.com/insights/blog/why-you-should-choose-sequential-testing-and-not-bayesian/:
+
+> Full Bayesian methods are about as useful for large-scale online experiments as a chemical dumpster fire. Bayesian methods offer a probability-based perspective, integrating prior knowledge and current data. If you make the wrong choice, like poorly selecting in the critical first step which statistical distribution you should set as your prior, your online experiment is going to be as slow as molasses.  
+
+**Chemical dumpster fire**? OK..
+
+Eppo (whose content I usually very much enjoy!) recently [published a post](https://www.geteppo.com/blog/comparing-frequentist-vs-bayesian-approaches) "Comparing Frequentist vs. Bayesian vs. Sequential Approaches to A/B Testing" where they compare "Bayesian analysis" to frequentist methodologies, such as hybrid sequential tests, fully sequential tests, group sequential tests and a simple t-test. Overall, it's a good read, but when it comes to Bayesian analysis assessment it includes statements such as 
+
+> **When to use Bayesian tests:**
+> Whether to use a frequentist or Bayesian approach often boils down to preference, but here are some other subjective reasons:
+> [...] If you prefer having the ease of explaining results over the rigor of strong statistical guarantees.
+  
+Sure.. now that's a positive reason that any self-respective scientist or experimentation lead would consider, right? 
+  
+
+Finally, Ron Kohavi published a [note on LinkedIn](https://www.linkedin.com/posts/ronnyk_draft-note-p-values-and-bayes-factors-in-activity-7170716579750432769-UyNu) where he uses Bayes factors, and points out that online Bayes calculators seem to be overly optimistic. The note and the thread is worth skimming through, but the overall conclusion seems to also lean towards "nope, Bayesian methods are not worth it".
+
+This is just not a fair assessment. Or, as XKCD put it:
+
+```{r, echo =FALSE, fig.align="center"}
+knitr::include_graphics('https://imgs.xkcd.com/comics/duty_calls.png')
+```
+
+Let's dive in.
+
+## You can not use "Bayesian analysis" for A/B testing
+
+
+

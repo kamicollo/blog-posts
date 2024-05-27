@@ -1,0 +1,103 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+from = 0
+to = 15
+step = 1
+t = seq(from, to, step)
+
+X = dpois(t, 5)
+Y = dpois(t, 7)
+
+
+XX = rpois(100000,5)
+YY = rpois(100000,7)
+
+ZZ = XX-YY
+
+P = table(ZZ) / length(ZZ)
+
+plot(names(P), P)
+
+new_t = seq(from-to,to-from,step)
+
+my_convolve = function(x,y,t) {
+  s = 0
+  t= t +2
+  for (i in 1:length(x)) {
+    if (t-i <= length(y) && (t-i) >= 1) {
+      s = s + x[i] * y[t-i]
+    }
+  }
+  return(s)
+}
+
+my_convolve_diff = function(x,y,t,lb=-15, ub=15) {
+  sum(sapply(lb:ub, function(i) {
+    x(i) * y(-t+i)
+  }))
+}
+
+my_ZZ = sapply(new_t, function(t) my_convolve(X,Y,t))
+my_ZZ = sapply(new_t, function(t) my_convolve_diff(
+  x=function(x) dpois(x,5),
+  y=function(x) dpois(x,7),
+  t=t, lb=-to, ub=to))
+
+
+lines(new_t, abs(convolve(X, -Y, type='o')))
+lines(new_t, my_ZZ, col='red', lty='dashed')
+```
+
+
+```{r}
+from = 0
+to = 1
+step = 0.01
+t = seq(from, to, step)
+
+X = dbeta(t, 100, 200)
+Y = dbeta(t, 120, 200)
+
+
+XX = rbeta(1000, 100, 200)
+YY = rbeta(1000, 100, 200)
+
+ZZ = round(XX-YY,2)
+
+P = table(ZZ) / length(ZZ) * 100
+
+
+new_t = seq(from-to,to-from,step)
+
+conv_cont = function(t) {
+  integrate(function(i) {
+  dbeta(i, 100, 200) * dbeta(i-t, 100, 200)
+}, lower=-Inf, upper=Inf)$value
+  
+}
+
+pdfs = sapply(new_t, conv_cont)
+
+CC = abs(convolve(X, -rev(Y), type='o'))
+
+plot(names(P), P, xlim=c(-1,1), ylim=c(0, 10))
+#lines(new_t, CC / 10)
+curve(dnorm(x, mean(ZZ), sd(ZZ)), from=-1,to=1, col='red', add=T, lty='dashed')
+
+lines(new_t, pdfs, col='green', lty='dashed')
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
