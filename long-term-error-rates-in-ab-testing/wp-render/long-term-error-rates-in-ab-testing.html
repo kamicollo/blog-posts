@@ -1893,7 +1893,7 @@ function nexttick(func) {
 <header class="quarto-title-block default" id="title-block-header">
 <div class="quarto-title">
 
-<p class="subtitle lead">Fiddling with MDE gives you nothing, sample size is king, and why a team that has good (but not great) ideas 75% of the time may see a win rate of just 25%</p>
+<p class="subtitle lead">Why a team that has good (but not great) ideas 75% of the time may see a win rate of just 25%, and why focusing on MDE/statistical power alone may not always be the best</p>
 </div>
 <div class="quarto-title-meta">
 </div>
@@ -1907,7 +1907,7 @@ function nexttick(func) {
 <p>However, they tell us little about the long-term dynamics of an “experimentation program” ( a series of experiments, each estimating the impact of a different treatment). You can’t immediately answer questions such as “What % of experiments can I expect to detect a statistically significant result in?”.</p>
 <p>That, however, may be an interesting question to answer. Suppose you’re <em>Head of Data Something</em> in a company that ran 100 experiments last year, of which only 5% yielded positive statistically significant results (a bit below <a href="https://hdsr.mitpress.mit.edu/pub/aj31wj81/release/1">an oft-quoted figure in the industry</a>). You may be wondering if that’s normal. Is it really so that 95% of product changes had zero impact? Perhaps they weren’t exactly zero, but simply smaller than you could declare as statistically significant with the sample sizes at hand?</p>
 <p>If you work in a large company, you may find yourself at the opposite of “statistically but not practically significant.” After all, a conversion rate improvement of 0.5 percentage point may still mean <em>many $$</em> annually. However, achieving 80% power on such an effect size requires a 3-4x sample size compared to an effect size of 1 percentage point. Are you willing to make that trade-off and make all experiments 3-4x slower?</p>
-<p>Understanding the relationship between experiment-level design parameters (MDE, sample size, power) and overall experimentation program win/detection/error rates can be pretty illuminating. So, let’s figure out how to do it.</p>
+<p>Understanding the relationship between experiment-level design parameters (minimum detectable effect (MDE), sample size, power) and overall experimentation program win/detection/error rates can be pretty illuminating. So, let’s figure out how to do it.</p>
 <p>This blog post is accompanied by an interactive <a href="https://ab-testing-long-term-error-rates.streamlit.app/">Streamlit app</a> where you can explore how all the different parameters come to life yourself.</p>
 <section class="level2" id="from-statistical-power-to-detectionwin-rates">
 <h2 data-anchor-id="from-statistical-power-to-detectionwin-rates">From statistical power to detection/win rates</h2>
@@ -2104,18 +2104,18 @@ function nexttick(func) {
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">Startup team</td>
-<td style="text-align: right;">0.0202</td>
-<td style="text-align: right;">-0.0182</td>
-<td style="text-align: right;">0.0203</td>
+<td style="text-align: right;">0.0201</td>
+<td style="text-align: right;">-0.0180</td>
+<td style="text-align: right;">0.0199</td>
 <td style="text-align: right;">0.0584</td>
-<td style="text-align: right;">0.7483</td>
+<td style="text-align: right;">0.7505</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">Mature team</td>
 <td style="text-align: right;">0.0050</td>
 <td style="text-align: right;">-0.0023</td>
 <td style="text-align: right;">0.0034</td>
-<td style="text-align: right;">0.0144</td>
+<td style="text-align: right;">0.0143</td>
 <td style="text-align: right;">0.7366</td>
 </tr>
 </tbody>
@@ -3030,18 +3030,18 @@ NOTE: n is number in *each* group</code></pre>
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">Startup team</td>
-<td style="text-align: right;">0.5015</td>
-<td style="text-align: right;">0.0023</td>
+<td style="text-align: right;">0.5033</td>
+<td style="text-align: right;">0.0028</td>
 <td style="text-align: right;">0.0057</td>
-<td style="text-align: right;">0.0046</td>
-<td style="text-align: right;">0.0113</td>
+<td style="text-align: right;">0.0056</td>
+<td style="text-align: right;">0.0114</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">Mature team</td>
-<td style="text-align: right;">0.0992</td>
-<td style="text-align: right;">0.0126</td>
+<td style="text-align: right;">0.0994</td>
+<td style="text-align: right;">0.0125</td>
 <td style="text-align: right;">0.0022</td>
-<td style="text-align: right;">0.1269</td>
+<td style="text-align: right;">0.1262</td>
 <td style="text-align: right;">0.0225</td>
 </tr>
 </tbody>

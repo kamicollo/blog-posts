@@ -1,6 +1,6 @@
 ---
 title: "Estimating long-term detection, win and error rates in A/B testing"
-subtitle: "Fiddling with MDE gives you nothing, sample size is king, and why a team that has good (but not great) ideas 75% of the time may see a win rate of just 25%"
+subtitle: "Why a team that has good (but not great) ideas 75% of the time may see a win rate of just 25%, and why focusing on MDE/statistical power alone may not always be the best"
 format: 
   html:
     embed-resources: true
@@ -37,7 +37,7 @@ That, however, may be an interesting question to answer. Suppose you're *Head of
 
 If you work in a large company, you may find yourself at the opposite of "statistically but not practically significant." After all, a conversion rate improvement of 0.5 percentage point may still mean *many \$\$* annually. However, achieving 80% power on such an effect size requires a 3-4x sample size compared to an effect size of 1 percentage point. Are you willing to make that trade-off and make all experiments 3-4x slower?
 
-Understanding the relationship between experiment-level design parameters (MDE, sample size, power) and overall experimentation program win/detection/error rates can be pretty illuminating. So, let's figure out how to do it.
+Understanding the relationship between experiment-level design parameters (minimum detectable effect (MDE), sample size, power) and overall experimentation program win/detection/error rates can be pretty illuminating. So, let's figure out how to do it.
 
 This blog post is accompanied by an interactive [Streamlit app](https://ab-testing-long-term-error-rates.streamlit.app/) where you can explore how all the different parameters come to life yourself.
 
