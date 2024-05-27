@@ -1,0 +1,682 @@
+---
+title: "Estimating long-term detection, win and error rates in A/B testing"
+subtitle: "Why a team that has good (but not great) ideas 75% of the time may see a win rate of just 25%, and why focusing on MDE/statistical power alone may not always be the best"
+format: 
+  html:
+    embed-resources: true
+    code-fold: show
+    code-summary: "Show code"
+    fig-align: "center"
+    fig-height: 4
+    fig-width: 8
+    page-layout: custom
+editor: visual
+html-math-method: mathml
+---
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+library(rbenchmark)
+library(tidyverse)
+library(ggplot2)
+library(kableExtra)
+library(pbapply)
+library(scales)
+```
+
+![](gohanks.jpg)
+
+Classical statistical guarantees in A/B testing (Type I and II error rates) are great at quantifying the reproducibility of a single experiment. As a reminder:
+
+-   Type I error rate, $\alpha$, guarantees that when the null hypothesis is true (typically: no difference between variants), you will only observe statistically significant results (i.e., observed data says there's a difference) $\alpha$ fraction of the time. It's the false positive rate for an experiment with no effect.
+
+-   Type II error rate, $1-\beta$, guarantees that when the null hypothesis is false, you will observe data that will yield statistically significant results $\beta$ fraction of the time (a.k.a statistical power), conditional on sample size, effect size of interest, and chosen $\alpha$ rate. It's the false negative rate for an experiment with an underlying effect.
+
+However, they tell us little about the long-term dynamics of an "experimentation program" ( a series of experiments, each estimating the impact of a different treatment). You can't immediately answer questions such as "What % of experiments can I expect to detect a statistically significant result in?".
+
+That, however, may be an interesting question to answer. Suppose you're *Head of Data Something* in a company that ran 100 experiments last year, of which only 5% yielded positive statistically significant results (a bit below [an oft-quoted figure in the industry](https://hdsr.mitpress.mit.edu/pub/aj31wj81/release/1)). You may be wondering if that's normal. Is it really so that 95% of product changes had zero impact? Perhaps they weren't exactly zero, but simply smaller than you could declare as statistically significant with the sample sizes at hand?
+
+If you work in a large company, you may find yourself at the opposite of "statistically but not practically significant." After all, a conversion rate improvement of 0.5 percentage point may still mean *many \$\$* annually. However, achieving 80% power on such an effect size requires a 3-4x sample size compared to an effect size of 1 percentage point. Are you willing to make that trade-off and make all experiments 3-4x slower?
+
+Understanding the relationship between experiment-level design parameters (minimum detectable effect (MDE), sample size, power) and overall experimentation program win/detection/error rates can be pretty illuminating. So, let's figure out how to do it.
+
+This blog post is accompanied by an interactive [Streamlit app](https://ab-testing-long-term-error-rates.streamlit.app/) where you can explore how all the different parameters come to life yourself.
+
+## From statistical power to detection/win rates
+
+You may wonder why the answer to long-term detection rates isn't simply the Type II error rate or "We will detect (i.e., declare them as statistically significant) differences when they exist 80% of the time".
+
+That's because the Type II error rate is conditional on the MDE. Assuming you use the same MDE all the time, you can claim that when the actual effect is at least as large as the MDE, we will detect it at least 80% of the time.
+
+But what if it's not? And how exactly does one think about the "at least" part of the statement? What if actual effects are larger/smaller than MDE? Your power will be exactly 80% only if you always choose MDE precisely equal to the actual unobservable difference for that specific experiment. If you can do that, you don't need to experiment!
+
+Frequentist approaches tend to develop tools that find upper/lower bounds of a measure of interest, and statistical power is an excellent example of that (I saw this clearly articulated in an [essay by Jacob Steinhardt titled "Beyond Bayesians and Frequentists"](#0) - I highly recommend it).
+
+However, we are after an expectation—we want to know the average expected detection rate. For that, we'll borrow an idea from Bayesian statistics that tends to be better suited for such purposes. Instead of working with fixed values, we will assume a distribution of likely effect sizes (a.k.a., a prior distribution) and then integrate over that distribution to get expected rates.
+
+To be precise, by integrating over a distribution of hypothesized treatment effect sizes $A$ (we'll call the distribution $F_A$), we can calculate:
+
+-   Expected "detection rate" - the % of experiments we would declare statistically significant given they have a non-zero actual treatment effect.
+
+-   Expected "win rate" - the % of experiments we would declare statistically significant, but we count only experiments with a positive treatment effect.
+
+Mathematically:
+
+$$
+\text{expected detection rate} = \int_{-\infty}^{+\infty} F_A(x) \text{Pr}(\text{reject } H_0 | x \neq 0, \alpha, n, \sigma^2) dx
+$$
+$$
+\text{expected win rate} = \int_0^{+\infty} F_A(x) \text{Pr}(\text{reject } H_0 | x \neq 0, n, \alpha, \sigma^2) dx
+$$
+
+where $n$ is the sample size, $\sigma^2$ is the variance of the outcome metric, and $\alpha$ is the chosen statistical significance level.
+
+One immediate thing to note is that detection/win rates do not depend on $MDE$ or $\beta$ (statistical power). The only levers you have to increase them are larger samples, variance reduction techniques (e.g., by using covariates, such as CUPED-like methods), better treatments (changes in $F_A$), and different $\alpha$ levels.
+
+If your immediate reaction is, "OMG, a subjective assumption on effect size distribution (gasp!)", I would like to remind you that choosing the MDE threshold for power calculations is subjective, too. Ideally, one would pick an MDE upfront and tune the sample size to achieve the desired statistical power. However, in practice, [there's always an incentive to cherry-pick an MDE itself](https://aurimas.eu/blog/2023/02/getting-faster-to-decisions-in-a-b-tests-part-2-misinterpretations-and-practical-challenges-of-classical-hypothesis-testing/), given a fixed sample size. It looks better to report a power of 80% with an MDE of 0.015 than a power of 50% with an MDE of 0.01.
+
+Having said that, if you use MDE correctly and report statistical power together with the MDE, bad MDE choices are more transparent than flawed effect size distribution assumptions. But if we want to estimate average detection/win rates, that's the cost we need to pay - there's no free lunch!
+
+### Selecting an effect size distribution
+
+So, how do we select a potential effect size distribution?
+
+-   Historical experiment results could be a good starting point for understanding where most of the distribution density should be. If most experiments see effect sizes of a few percentage points, then the distribution should reflect that, too. Importantly, we should consider observed treatment effects in all experiments, not just the statistically significant ones.
+
+-   Teams have domain expertise and are paid to do their work, so we'd hope they do better than a random flip of a coin - the mean/median of the distribution should be positive.
+
+-   The distribution should not be symmetric. Teams may occasionally experiment with more drastic changes, but safeguards (dogfooding, small-scale pilots, UX research) should prevent ideas with a major negative impact from reaching the experimentation phase.
+
+From a modeling perspective, a (shifted/scaled) Gamma distribution is a good option for modeling such skewed distributions with limited downside and a longer tail of positive effects.
+
+For the sake of this blog post, I will use two distributions representing different hypothetical teams:
+
+-   **Mature product team**. This team manages a mature product with a well-established user base. Experiments usually represent incremental changes and minor features, and thus, an average experiment achieves just a $0.5$ percentage point improvement. They extensively rely on dogfooding, UXR, and other means to test ideas before they reach the experimentation phase, thus protecting the downside very well. We'll model it with a Gamma distribution.
+
+-   **Startup product team.** This team is still in the product-market fit stage. They tend to make wide-ranging changes and like moving fast, without too much research before the experimentation phase. Because it's a less polished product, experiments tend to produce higher gains ($2.0$ percentage point improvements, on average), but they also see negative impacts from changes tested more often. We'll model it with a Normal distribution.
+
+```{r, warning=F, message=F}
+#| code-fold: true
+#| code-summary: "Show code"
+
+
+eff_size_distrs = list(
+  list(
+    name = 'Startup team',
+    distr = 'x ~ N(0.02, 0.03)',
+    generator = function() rnorm(1, mean=0.02, sd=0.03),
+    density = function(x) dnorm(x, mean = 0.02, sd = 0.03) 
+  ),
+  list(
+    name = 'Mature team',
+    distr = 'x ~ Gamma(2,200)) - 0.005',
+    generator = function() rgamma(1, shape=2, rate = 200) - 0.005,
+    density = function(x) dgamma(x + 0.005, shape=2, rate = 200)
+  )
+)
+
+```
+
+Here's how that looks visually, with some summary statistics below.
+
+```{r, warning=F, message=F}
+#| code-fold: true
+#| code-summary: "Show code"
+
+emp = lapply(
+  eff_size_distrs,
+  function(d) {
+    r = list()
+    r[[d$name]] = sapply(1:50000, function(i) d$generator())
+    r
+  }
+) |> bind_cols() |> pivot_longer(everything(), names_to = "Assumed distribution")
+
+ggplot(emp) + 
+  #geom_density(aes(x=value, color=`Assumed distribution`)) +
+  sapply(
+  eff_size_distrs, 
+  function(d) stat_function(
+    aes(color=d$name, fill=d$name), 
+    fun = d$density,
+    data = tibble(name = d$name, full_name = paste(d$name, '', d$distr)),
+    geom="area",
+    alpha=0.5
+  )
+) + 
+  xlim(-0.05, 0.1) + labs(
+    y='Density',
+    color='Assumed effect size distribution',
+    x='Effect size',
+    title='Some possible effect size assumptions'
+  ) + 
+  theme_light() + 
+  theme(
+    panel.grid.major = element_blank(),
+    legend.position = "none"
+  ) + facet_wrap(~full_name) +
+  geom_vline(xintercept = 0, linetype = 'dotted')
+
+emp |> group_by(`Assumed distribution`) |>
+  summarize(
+    `Avg. effect` = mean(value),
+    `10th pctile` = quantile(value, 0.1),
+    `Q50 (median)` = quantile(value, 0.5),
+    `90th pctile` = quantile(value, 0.9),
+    `Share of experiments with positive effect` = mean(if_else(value > 0,1,0))
+  ) |> 
+  arrange(-`Avg. effect`) |>
+  kbl(
+    caption = 'Summary statistics of assumed effect size distributions',
+    digits=4
+  ) |>
+  kable_styling()
+
+```
+
+Note that both teams are expected to produce nearly the same (\~75%) share of experiments that have a positive impact. We could interpret that as both teams having a similar "quality of ideas." It's just that the effect sizes differ due to the different contexts in which they operate - a median experiment of the mature team is assumed to produce just a 0.3ppt effect, while the startup team - 2ppt, a 6x difference.
+
+### Estimating average expected detection/win rates
+
+To estimate detection/win rates, we need a few more inputs. Let's assume that:
+
+-   Both teams are optimizing a metric that has a baseline of $0.17$
+
+-   Both teams run experiments with 10,000 observations per group (let's say they both used $0.015$ as their MDE and chose $\beta=0.2$; if you were to plug these inputs into a sample size calculation, you'd get close to 10,000).
+
+```{r}
+baseline = 0.17
+required_sample_size = 10000
+mde = 0.015
+
+#check that power is ~80%
+power.prop.test(n=required_sample_size, p1=baseline, p2=baseline + mde)
+```
+
+What long-term detection rates should they expect to see?
+
+```{r, warning=FALSE, message=F}
+
+estimate_detection_rate = function(baseline, required_sample_size, density_func) {
+  integrate(function(x) {
+    p = power.prop.test(
+      n=required_sample_size, 
+      p1=baseline,
+      p2=baseline + x
+    )$power    
+    density_func(x) * replace_na(p, 0)    
+  }, -Inf, Inf)$value  
+}
+
+tibble(
+  `Assumed effect size distribution` = sapply(eff_size_distrs, function(x) x$name),
+  `P(detect | effect size distribution, N, baseline)` = sapply(
+    eff_size_distrs,
+    function(x) estimate_detection_rate(baseline, required_sample_size, x$density)
+  )
+) |> kbl(caption='Long-run detection rates', digits=2) |> kable_styling()
+```
+
+A massive difference! The startup team will be detecting an impact in nearly 80% of experiments, while the mature team will do so only in 25% of them!
+
+What about win rates?
+
+```{r, warning=FALSE, message=F}
+estimate_win_rate = function(baseline, required_sample_size, density_func) {
+  integrate(function(x) {
+    p = power.prop.test(
+      n=required_sample_size, 
+      p1=baseline,
+      p2=baseline + x
+    )$power    
+    density_func(x) * replace_na(p, 0)    
+  }, 0, Inf)$value  
+}
+
+tibble(
+  `Assumed effect size distribution` = sapply(eff_size_distrs, function(x) x$name),
+  `P(detect a win | effect size distribution, N, baseline)` = sapply(
+    eff_size_distrs,
+    function(x) estimate_win_rate(baseline, required_sample_size, x$density)
+  )
+) |> kbl(caption='Long-run win rates', digits=2) |> kable_styling()
+```
+
+We get 62% and 24%, respectively. The latter number isn't far off an [often-quoted](https://hdsr.mitpress.mit.edu/pub/aj31wj81/release/1) figure for the win rate in online experiments of $10-20\%$. That's worth pondering: we know that the mature team produces winning ideas 75% of the time, but because most effects are minor, the actual observable win rate is just 24%.
+
+Remember, these results were obtained using a sample size that "provides 80% power under an MDE of 1.5%"! But our "actual power" is closer to 30% (0.24/0.75). The MDE choice in the case of the mature team is clearly questionable.
+
+## Impact of sample size
+
+How do win and detection rates change with the sample size? We can plot win and detection rates as a function of $n$.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show code"
+
+sample_sizes = seq(1000, 200000, 2000)
+
+win_and_detection_rates = pblapply(sample_sizes, function(n) {
+  lapply(eff_size_distrs, function(d) {
+    list(
+      name = d$name, 
+      detection_rate = estimate_detection_rate(baseline, n, d$density),
+      win_rate = estimate_win_rate(baseline, n, d$density), 
+      n=n
+    )
+  })
+}, cl=4) |> bind_rows()
+
+mde_sample_sizes = lapply(c(0.004, 0.005, 0.0075, 0.01, 0.015), function(mde) {
+  list(
+    n=power.prop.test(
+      p1=baseline, p2=baseline + mde, power=0.8, sig.level=0.05
+    )$n, 
+    mde=mde
+  )
+}) |> bind_rows()
+
+ggplot(win_and_detection_rates) + 
+  geom_line(aes(x= n, y=detection_rate, color=name, linetype="Detection rate")) +
+  geom_line(aes(x= n, y=win_rate, color=name, linetype='Win rate')) +
+  geom_hline(aes(yintercept=0.75, color='Startup team', linetype='Share of positive-impact experiments')) +
+  geom_hline(aes(yintercept=0.74, color='Mature team', linetype='Share of positive-impact experiments')) +
+  theme_light() + 
+  theme(
+    panel.grid.major = element_blank(),
+    legend.position = "right"
+  ) + labs(
+    x = 'Sample size (per group)',
+    y = '',
+    color = 'Effect size prior assumption',
+    title = 'Avg detection and win rates as function of sample size',
+    linetype = 'Metric'
+  ) +
+  scale_x_continuous(
+    sec.axis = dup_axis(
+      name = 'MDE that results in 80% power',
+      breaks = mde_sample_sizes[['n']],
+      labels = scales::percent(mde_sample_sizes[['mde']]),
+      guide = guide_axis(n.dodge = 3)
+    ),
+    breaks = c(1000, seq(0, 200000, 5000)),
+    labels = c("1,000", sapply(
+      seq(0, 200000, 5000), 
+      function(x) if_else(x %% 40000 == 0 && x > 0, format(x, big.mark = ","), ""))
+    )
+  ) +
+  scale_y_continuous(breaks = seq(0, 1, 0.1), labels = scales::percent_format()) +
+  scale_linetype_manual(
+    values = c(
+      "Detection rate"="solid", 
+      "Win rate" = 'longdash',
+      "Share of positive-impact experiments" = 'dashed'
+    )
+  )
+```
+
+There's a lot going on in this chart, but here's a few key takeaways:
+
+-   The start-up team reaches \~90% detection rates (and, by extension, approaches its true win rate) as soon as the experiment sample size exceeds 40,000 observations per group. There's little to be gained beyond that.
+
+-   At the same time, if this were an early-stage start-up with just a few thousand customers to experiment with, it's very possible it would see win/detection rates of just 50-60%. It's a tough trade-off between the speed in decision-making that's key in a start-up context and a higher share of false positives.
+
+-   In the case of the mature team, there's most to be gained until sample sizes reach \~80,000 observations per group. That's an MDE of \~0.5%! Previously, we saw that using a 1.5% MDE (or 10,000 users per group) yields an observable win rate of 24%; increasing the sample size to 80,000 would double the observable win rate. Granted, most of these wins would be small, but as discussed above, that may still be a lot of money.
+
+-   The mature team would have difficulty seeing win rates close to its true success rate (74%). It would take 5,000,000 observations per group to reach a win rate of 70%.
+
+## What about the Type I error rate in this context?
+
+We saw how to go from statistical power / Type II error rate to long-term detection/win rates. Can we do the same with the Type I error rate?
+
+Well, the thing is that the Type I error rate is only relevant if some experiments have zero impact. It's not "close enough" to zero, but literally zero. In reality, (hopefully!) you don't run such experiments. It works for individual experiments because the frequentist hypothesis testing framework asks "how likely we would have observed data like the one at hand if the true effect was zero" and not "how likely the true effect is zero." But this question doesn't translate to a series of experiments.
+
+Additionally, the Type I error rate does not depend on the data you collect (sample size, variance). Even if you assume that some experiments have precisely zero impact, all you can do is choose Type I error rate with $\alpha$; you can't influence it beyond that choice.
+
+As a result, there's nothing we can optimize ¯\\\_(ツ)\_/¯. You could ask deeper questions about the usefulness of an independent-of-data error rate that doesn't apply in most situations, which would land you into the world of "Is null hypothesis testing the right thing to do?" but we're not going there today.
+
+What are the alternatives?
+
+For one, we can estimate expected confidence interval widths and quantify the average uncertainty in our results. In a [simple t-test setting](https://stats.stackexchange.com/questions/240452/does-the-width-of-the-confidence-interval-necessarily-imply-power): $CI_{\text{width}} = 2 MDE(\beta=0.5)$, i.e., the widths are twice the MDE that yields 50% power. Or, graphically:
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show code"
+
+sample_sizes = seq(1000, 200000, 1000)
+
+ci_widths = lapply(sample_sizes, function(n) {
+  list(
+    n=n,
+    ci_width = (power.prop.test(p1=baseline, power=0.5, n=n)$p2 - baseline) * 2
+  )
+}) |> bind_rows()
+
+ggplot(ci_widths) + 
+  geom_linerange(aes(x=n, ymin=-ci_width/2, ymax=ci_width/2)) +
+  theme_light() + 
+  theme(
+    panel.grid.major = element_blank(),
+    legend.position = "right"
+  ) + labs(
+    x = 'Sample size (per group)',
+    y = 'CI width',
+    title = 'Confidence interval widths as a function of sample size'
+  )
+```
+
+But in the spirit of focusing on "error rates," let's explore some other error types - meet Type S and Type M error rates.
+
+### Type M and S errors
+
+[Gelman and Carlin](https://journals.sagepub.com/doi/10.1177/1745691614551642) (2014) introduced two other metrics to use in statistical inference:
+
+-   **Type S (sign) error.** It's the probability that an observed difference, when declared statistically significant, has an opposite sign than the actual difference. In other words, it is the probability that you will make a decision that is opposite to what you are after. It directly relates to the practical implications of making a wrong decision. In a lot of situations, rolling out a zero-impact change is not the end of the world. Rolling out something that has an impact opposite to the one estimated in an experiment? That's bad!
+-   **Type M (Magnitude) error** measures how much the observed difference, when declared statistically significant, differs from the actual difference, expressed as a ratio. It partially addresses the issue of quantifying the risk of saying "effect sizes so small that they don't practically matter" as statistically significant and is closely related to the [winner's curse phenomenon](https://www.etsy.com/codeascraft/mitigating-the-winners-curse-in-online-experiments?utm_source=pocket_reader). I like Type M error a lot because it provides a rigorous quantification of the hand-wavy statement, "Yeah, the results are statistically significant, but I would not trust them due to the small sample size." It provides a bridge between sample size and Type I error rate.
+
+#### Calculating Type S and M error rates
+
+The original paper proposed calculating Type S and M error rates via simulation. using a function. In 2019, [Lu, Qui, and Deng](https://pubmed.ncbi.nlm.nih.gov/29569719/) published a paper that included closed-form formulas for these error rates. Their implementation is below (and can be easily extended to unequal sample size designs).
+
+The rates are a function of four parameters: $A$, the effect size; $\sigma$, the observed standard deviation of a metric; $\alpha$, the chosen level of statistical significance; and $n$, the sample size.
+
+$A$, conceptually, is a *hypothesized* effect size. That's not the same as $MDE$ - arguably, in a well-designed experiment, $MDE$ should always be smaller than $A$, as it's the minimum effect size you're interested in detecting.
+
+```{r}
+calculate_type_SM = function(A, sd, n, alpha = 0.05) {
+  # A - effect size
+  # sd - baseline standard deviation
+  # n - size per group
+  lambda = abs(A) / sqrt(sd**2/n + sd**2/n)
+  z = qnorm(1 - alpha/2)
+  neg = pnorm(-z -lambda)
+  diff = pnorm(z - lambda)
+  pos = pnorm(z + lambda)
+  inv_diff = pnorm(lambda - z)
+  list(
+    power = neg + 1 - diff,
+    typeS = neg / (neg + 1 - diff),
+    typeM = (
+      dnorm(lambda + z) + dnorm(lambda - z) + lambda * (pos + inv_diff - 1)
+    ) / (lambda * (1 - pos + inv_diff))
+  )
+}
+```
+
+To get a sense of how these error rates look like, let's use the setup from the examples above: a baseline of *17%,* the hypothesized effect size of 1 percentage point, and a sample size of 10,000 users in each group:
+
+```{r}
+
+closed_form = calculate_type_SM(
+  A=0.01, 
+  sd=sqrt(baseline * (1 - baseline)), 
+  n = required_sample_size
+) |> as_tibble() |> mutate(method = 'Closed-form formula')
+
+closed_form |>
+  kbl(caption = 'Estimated Metrics', digits=6) |> kable_styling()
+```
+
+The risk of a sign error in such a setting is very small - just $\sim1/7700$. The type M ratio, on the other hand, is $1.45$; a 45% overestimation can be meaningful in decision-making.
+
+We can verify that these formulas are correct with a small simulation. In this simulation, we repeat the same experiment with the above parameters many times and estimate empirical error rate estimates. Note that estimating Type S error accurately via simulation isn't easy given how rare it is, which is why even with 100,000 loops, we are still a bit off.
+
+```{r, message=FALSE, warning=F}
+
+pboptions(type="none")
+sim_results = pbsapply(1:100000, function(i) {
+  set.seed(i*24)
+  A = rbinom(required_sample_size, 1, baseline)
+  B = rbinom(required_sample_size, 1, baseline + 0.01)
+  mean_diff = mean(B) - mean(A)
+  p_value = t.test(B, A)$p.value  
+  c(
+    detected = p_value <= 0.05,
+    sign_error = ifelse(p_value <= 0.05, sign(mean_diff) != sign(0.01), NA),
+    ratio = ifelse(p_value <= 0.05, mean_diff / 0.01, NA)
+  )  
+}, cl=4) |> t() |> as_tibble()
+
+
+empirical_rates = sim_results |> summarize(
+  power = mean(detected, na.rm=T),
+  typeS = mean(sign_error, na.rm=T),
+  typeM = mean(ratio, na.rm=T),
+  method = 'Empirical results'
+)
+
+bind_rows(closed_form, empirical_rates) |> 
+  kbl(caption = 'Estimated Metrics') |> kable_styling()
+```
+
+Lu, Qiu, and Deng's paper includes charts that perfectly illustrate the risk associated with underpowered experiments. On the x-axis, we plot statistical power (or, equivalently, sample size given a chosen $A=MDE$), and on the y-axis - Type S error rate / Type M ratio:
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show code"
+
+error_rates = lapply(seq(500, 40000, 500), function(n) {
+  calculate_type_SM(0.01, sqrt(baseline * (1 - baseline)), n)
+}) |> bind_rows() |> pivot_longer(-power)
+
+ggplot(error_rates, aes(x=power)) + 
+  geom_line(aes(y=value, color=name)) +
+  scale_x_continuous(breaks=seq(0.05, 0.95, 0.2)) +
+  facet_wrap(
+    ~name, 
+    scales='free_y', strip.position = 'top',
+    labeller = as_labeller(c(typeM = 'Type M error ratio', typeS='Type S error rate'))
+  ) +
+  labs(x = 'Statistical power') +
+  theme_light() + 
+  theme(
+    panel.grid.major.x = element_blank(),
+    legend.position = "none",
+    strip.placement = "outside"
+  ) + ylab(NULL)
+```
+
+We can see that Type S error (which is very costly, decision-making-wise!) largely disappears once we hit the statistical power of 0.35−0.4. On the other hand, the type M ratio only goes below 1.5x once we achieve the statistical power of $0.5$.
+
+These charts should be a part of any Experimentation 101 course.
+
+### Obtaining long-term sign-error / exaggeration rates
+
+Type M and S rates depend on a hypothesized effect size $A$, just like the Type II error rate depends on $MDE$, so we'll need the same integration approach to get to long-term "average" rates. We'll also tweak the definitions a bit and calculate:
+
+-   Expected "sign error rate" - the % of experiments where we will declare the results statistically significant, but the observed treatment effect will have an opposite sign than the actual treatment effect. We'll use all experiments as the denominator here, which is slightly different from the Type S error rate definition. If needed, we can divide this rate by the average detection rate to get back to the original definition.
+
+-   Expected "average absolute exaggeration" - the expected absolute difference between the observed and actual treatment effects among experiments that we declare statistically significant. We'll focus on absolute difference rather than a Type M-style ratio metric because integrating Type M ratio directly at small effect sizes is challenging as the ratio's denominator approaches zero.
+
+```{r, warning=F, message=F}
+#| code-fold: true
+#| code-summary: "Show code"
+
+estimate_sign_error_rate = function(baseline, s, density_func) {  
+  baseline_sd = sqrt(baseline * (1 - baseline))
+  integrate(function(x) {
+    r = calculate_type_SM(n=s, A=x, sd=baseline_sd)
+    (r$typeS * r$power) * density_func(x)    
+  }, -Inf, Inf, stop.on.error = F)$value
+}
+
+estimate_abs_exaggeration = function(baseline, s, density_func) {  
+  baseline_sd = sqrt(baseline * (1 - baseline))
+  integrate(function(x) {
+    r = calculate_type_SM(n=s, A=x, sd=baseline_sd)
+    (r$typeM - 1) * density_func(x) * abs(x) * r$power    
+  }, -Inf, Inf, stop.on.error = F)$value
+}
+
+
+sign_and_ratio_rates = pblapply(sample_sizes, function(n) {
+  lapply(eff_size_distrs, function(d) {
+    list(
+      name = d$name, 
+      sign_error_rate = estimate_sign_error_rate(baseline, n, d$density),
+      exaggeration_ratio = estimate_abs_exaggeration(baseline, n, d$density), 
+      n=n
+    )
+  })
+  
+}, cl=4) |> bind_rows() |> pivot_longer(
+  cols=c('sign_error_rate', 'exaggeration_ratio'), names_to = "metric"
+)
+```
+
+How do these rates look under the assumptions of effect size distributions we used earlier?
+
+```{r, warning=F, message=F}
+#| code-fold: true
+#| code-summary: "Show code"
+
+ggplot(sign_and_ratio_rates) + 
+  geom_line(aes(x= n, y=value, color=name)) +
+  theme_light() + 
+  theme(
+    panel.grid.major = element_blank(),
+    legend.position = "bottom"
+  ) + labs(
+    x = 'Sample size (per group)',
+    y = '',
+    color = 'Effect size prior assumption',
+    title = 'Avg sign error rates and effect exaggeration size function of sample size',
+    subtitle='Note: Discontinuities in the charts are an artifact of numeric integration...'
+  ) +
+  facet_wrap(
+    ~metric, 
+    scales='free_y', strip.position = 'top',
+    labeller = as_labeller(c(
+      exaggeration_ratio = 'Avg. absolute exaggeration', 
+      sign_error_rate='Avg. sign error rate'
+    ))
+  ) +
+  scale_x_continuous(
+    breaks = c(1000, seq(0, 200000, 5000)),
+    labels = c("1,000", sapply(
+      seq(0, 200000, 5000), 
+      function(x) if_else(x %% 40000 == 0 && x > 0, format(x, big.mark = ","), ""))
+    )
+  )
+```
+
+-   Broadly, once you enter 5000+ observations per group territory, sign error rates and average absolute exaggeration become limited. Even at "small" sample sizes (e.g., 1,000 observations), they are not worrisome, especially in the case of the start-up team.
+
+-   The mature team has it worse on both metrics, given the same sample size; its experiments have a higher risk of sign error and a higher exaggeration ratio. This reflects the fact that, when the results are statistically significant, the effect sizes tend to be smaller (and thus at a higher risk of being influenced by a higher sampling error).
+
+-   Again, a sample size of 80,000 observations per group seems to be where the mature team starts to see diminishing returns. The average absolute exaggeration decreases below $0.0005$ (5 basis points), and the sign error rate goes below $0.25\%$.
+
+## Conclusion
+
+So, what's the TLDR?
+
+-   A low observable win rate of (e.g., $25\%$) doesn't necessarily mean that the team produces winning ideas infrequently. It may simply be that the impact those ideas have tends to be smaller than you can reliably detect.
+
+-   The only way to increase observable win/detection rates is by increasing sample sizes (or reducing the variance of the outcome metric). Choosing a higher MDE will not. If the effect sizes you tend to achieve are \~1ppt, you are artificially reducing your long-term win rate 2x if you run experiments with MDE of 1ppt instead of 0.5ppt.
+
+-   Once you are in the 5,000+ sample size territory, the risk of sign errors is minimal. On the other hand, exaggeration ratios tend to remain sizable and should be considered when making decisions.
+
+Does this mean a team operating in a mature setting should insist on 100,000+ observations in every experiment? It depends on how you answer questions like:
+
+-   Do small effects truly matter? Perhaps having a 50% chance of detecting a 0.5ppt impact is OK? Maybe a tiny positive effect size is still a failure from a business perspective?
+
+-   Do experiment runtimes impede the team's ability to learn and execute? It's one thing if you're just impatient and need to accept that waiting for another four weeks will enable a more precise decision, bringing in $\$\$\$$ for years to come. It's another if you're blocked by the experiment or run so few experiments that you're not learning enough.
+
+Most importantly, remember that fiddling with an MDE gives you nothing. Sample size is king. Use CUPED to reduce variance and sequential testing to enable peeking; otherwise, it's all about the actual changes you test.
+
+And, if you want to play around with effect size distrubution assumptions and see corresponding win/detection/sign error rates - I made a small [Streamlit app](https://ab-testing-long-term-error-rates.streamlit.app/) just for that.
+
+## Appendix - Don't trust the maths
+
+Integration formulas look fancy, but do they work? I ran another simulation to double-check—it looks like it all adds up, with exception of exaggeration ratios that are a bit off. I suspect that differences arise from numerical approximations in integration.
+
+```{r, warning=F, message=F}
+#| code-fold: true
+#| code-summary: "Show code"
+
+num_experiments = 100000
+
+used_sample_size = floor(power.prop.test(
+  p1=baseline, 
+  p2=baseline + 0.015,
+  power=0.2)$n)
+
+appendix_sim = pblapply(eff_size_distrs, function(d) {
+  drawn_effect_sizes = sapply(
+    1:num_experiments, 
+    function(i) d$generator()
+  )  
+  set.seed(42)
+  exp_results = tibble(
+    eff_size = drawn_effect_sizes,
+    converted_A = rbinom(
+      num_experiments, 
+      used_sample_size, 
+      baseline
+    ),
+    converted_B = rbinom(
+      num_experiments, 
+      used_sample_size, 
+      baseline + drawn_effect_sizes
+    )
+  )|> mutate(
+    conv_rate_A = converted_A / used_sample_size,
+    conv_rate_B = converted_B / used_sample_size,
+  ) |> mutate(
+    mean_diff = conv_rate_B - conv_rate_A,
+    st_error = sqrt(
+      (conv_rate_A * (1 - conv_rate_A) / used_sample_size) +
+      (conv_rate_B * (1 - conv_rate_B) / used_sample_size)
+    )
+  ) |>
+    mutate(
+      is_stat_sig = abs(mean_diff / st_error) >= qnorm(0.975)
+    ) |> mutate(
+      sign_error = if_else(
+        is_stat_sig, 
+        sign(mean_diff) != sign(drawn_effect_sizes), 
+        NA
+      ),
+      exaggeration = if_else(is_stat_sig, abs(mean_diff - drawn_effect_sizes), NA)
+    )
+  
+  exp_results |> summarize(
+    distribution = d$name,
+    detection_rate = mean(is_stat_sig),
+    avg_sign_error = mean(replace_na(sign_error, F)),
+    avg_exaggeration = mean(replace_na(exaggeration, 0)),
+    avg_TypeS = mean(sign_error, na.rm=T),
+    avg_conditional_exaggeration = mean(exaggeration, na.rm=T)
+  )
+}) |> bind_rows()
+
+appendix_sim |> 
+  kbl(caption='Simulation results using N = 20% power at MDE of 0.015', digits=4) |> 
+  kable_styling()
+
+lapply(eff_size_distrs, function(d) {
+  list(
+    distribution = d$name,
+    detection_rate = estimate_detection_rate(
+      baseline = baseline, 
+      required_sample_size = used_sample_size, 
+      density_func = d$density
+    ),
+    avg_sign_error = estimate_sign_error_rate(
+      baseline = baseline, 
+      s = used_sample_size, 
+      density_func = d$density
+    ),
+    avg_exaggeration = estimate_abs_exaggeration(
+      baseline = baseline, 
+      s = used_sample_size, 
+      density_func = d$density
+    )
+  )
+}) |> bind_rows() |> 
+  mutate(
+    avg_TypeS = avg_sign_error / detection_rate,
+    avg_conditional_exaggeration = avg_exaggeration / detection_rate
+  ) |>
+  kbl(caption='Integration results with equivalent parameters', digits=4) |> 
+  kable_styling()
+```
