@@ -1,0 +1,448 @@
+---
+title: "P-value is the probability that treatment effect is larger than zero. Under certain conditions."
+format: 
+  html:
+    embed-resources: true
+    code-fold: show
+    code-summary: "Show code"
+    fig-align: "center"
+    fig-height: 4
+    fig-width: 8
+    page-layout: custom
+editor: visual
+html-math-method: mathml
+---
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(kableExtra)
+```
+
+Ah, the beautiful concept of p-value. The probability of observing the result as extreme or more extreme than the data at hand, assuming the null hypothesis is true. Not a single person ever simplified it to something else. Like.. I don't know.. the probability that the null hypothesis is true? Or, in an A/B test, the probability that treatment is greater/smaller than zero? 👀
+
+Doing that is equivalent to committing an original data science sin. You'd be banished to the ungodly world full of local optima, spaghetti SQL, Excel downloads and out-of-date dashboards. Or simply wouldn't pass an screening round in a hiring process.
+
+BUT.
+
+P-value can be equal to the probability that the treatment effect is greater/smaller than zero. In the context of A/B testing, where we are in a straightforward univariate hypothesis testing setting, it is as simple as employing a Bayesian approach with an uninformative prior. 
+
+This post, I admit, is partly for kicks. But it has some practical implications, too:
+
+ - Most articles on using Bayesian A/B testing will tell you that using uninformative priors is not a very good idea. While I agree, the fact that using them yields results equivalent to a most popular frequentist procedure means that they aren't a terrible choice. There are [some vendors out there that scaremonger](https://www.optimizely.com/insights/blog/why-you-should-choose-sequential-testing-and-not-bayesian/) into shying away from using Bayesian approaches. This post shows that if you choose to go with uninformative priors, you'll be shooting yourself into the foot as much as you would with a simple t-test.
+
+ - The bad thing, however, is that p-values have such an interpretation under very unrealistic assumptions of prior distributions. In practice, thus, interpreting p-value as a direct measure of evidence or using uninformative priors is a bad idea.
+
+### The Gaussian case
+
+Let's consider the following setup:
+
+-   We're interested in measuring the impact of a simple A/B test.
+
+-   Our outcome metric happens to be normally distributed: $Y_A \sim N(\mu_A, \sigma_A)$ and $Y_B \sim N(\mu_B, \sigma_B)$. For simplicity, we will set $\mu_A = 0, \mu_B = 0.05, \text{ and } \sigma_A, \sigma_B = 1$. In other words, equal variance, and a treatment effect of $0.05$.
+
+Suppose we ran an experiment and collected 6,000 samples in each experiment arm (that's 78% power, assuming we set MDE equal to the true unobservable population effect).
+
+#### A quick t-test refresher
+
+If we were to evaluate our results using a t-test, we would:
+
+-   Compute sample means: $\bar{Y_A} = \text{mean}(Y_A)$, $\bar{Y_B} = \text{mean}(Y_B)$
+
+-   Compute sample variances: $s_A^2\ =\text{var}(Y_A)$, $s_B^2\ =\text{var}(Y_B)$
+
+Then, enabled by CLT, we can claim that the difference of the means between the two groups is normally distributed (that distribution is referred to as the "sampling distribution"), with the following parameters:
+
+-   Mean: $\bar{Z} = \bar{Y_A} - \bar{Y_B}$
+
+-   Standard error: $s_Z = \sqrt{\frac{s_A^2}{n_A} + \frac{s_B^2}{n_B}}$
+
+Finally, we calculate the test statistic $t = \bar{Z} / s_Z$, and look up the associated CDF of the sampling distribution at that point (a.k.a p-value).
+
+This is how it may look numerically.
+
+```{r, echo=TRUE}
+
+set.seed(42)
+n = 6000
+effect_size = 0.05
+
+A = rnorm(n, 0, 1)
+B = rnorm(n, effect_size, 1)
+
+sampling_distribution = function(X, Y) {
+  list(
+    mean = mean(X) - mean(Y),
+    sd = sqrt(var(X) / n + var(Y) / n)
+  )
+}
+
+sdist = sampling_distribution(B, A)
+t = sdist$mean / sdist$sd
+
+as_tibble(sdist) |> 
+  pivot_longer(everything(), names_to = "statistic") |> 
+  kbl(caption='Summary statistics of the sampling distribution') |> 
+  kable_minimal(full_width = T, position='left')
+
+tibble(
+  statistic = c('Test statistic', 'P-value'),
+  value = c(t, (1 - pnorm(t)) * 2)
+) |> kbl(caption='Hypothesis test outcomes') |> 
+  kable_minimal(full_width = T, position='left')
+```
+
+As a visual reminder - the p-value is twice the CDF of the sampling distribution in the range $[-\infty, 0]$ (twice, because we're testing for a two-sided alternative hypothesis).
+
+```{r, echo=F}
+#| code-fold: true
+#| code-summary: "Show code"
+
+pvalue_dens = function(x, mean, sd) {
+  if_else(x <= 0, dnorm(x, mean, sd), 0)
+}
+
+ggplot() + geom_function(
+  fun = dnorm,
+  args = sdist
+) + xlim(-0.1, 0.1) + 
+  geom_vline(xintercept=0, color='red', linetype='dashed') + 
+  xlab("") + ggtitle("PDF of the sampling distribution") + 
+  ylab("Density") +
+  stat_function(
+    fun = dnorm,
+    args = sdist,
+    geom = 'area',
+    fill = 'red',
+    xlim = c(-0.1, 0.0)
+  ) + 
+  annotate('text', x = -0.03, y=5, label='one sided p-value') + 
+  geom_curve(
+    aes(x=-0.02, y=3, xend=-0.003, yend=0.5), 
+    arrow=arrow(angle=-30), linewidth=0.5
+  ) +
+  theme_light() + theme(panel.grid=element_blank())
+```
+
+Mathematically, we don't need to calculate the test statistic. We can get the CDF directly using the parameters of our sampling distribution.
+
+```{r, echo=T}
+#this is also a p-value!
+format(pnorm(0, mean = sdist$mean, sd = sdist$sd, lower.tail=T) * 2, digits=4)
+```
+
+We can double-check using the built-in R functions.
+
+```{r, echo=T}
+t.test(B, A)
+```
+
+Great, we can conclude that, if our hypothesis of treatment having no effect were true, we would be observing a difference between two groups at least as large as we did (we observed a difference of `0.041`) roughly 2% of the time. 
+
+Sounds rare enough that we could reject our null hypothesis and conclude that there indeed is a difference. 
+
+We also conclude that the true effect should be somewhere between `0.005` and `0.078` 95% of the time if we were to repeat this experiment an infinite number of times. As for this particular run - well, it's either inside that range or not. T-tests (or frequentist approaches, more generally) don't tell you anything about this particular experiment. Just long-term probabilities.
+
+A mouthful. But hey, this isn't a post about issues with null hypothesis testing. I wrote that [one already](https://aurimas.eu/blog/2023/02/getting-faster-to-decisions-in-a-b-tests-part-2-misinterpretations-and-practical-challenges-of-classical-hypothesis-testing/).
+
+#### A Bayesian approach
+
+Generally, saying "I'm using a Bayesian approach" is like saying "I'm using linear algebra". It's not a statistical method. We need an estimand! We will use the simplest one: the probability that the treatment is larger than 0.
+
+Next, we will need uninformative priors. We can achieve that by choosing normal distribution priors with variance approaching infinity (making any number in the real domain roughly equally likely), i.e.:$Y_A, Y_B \sim N(0, 1/\tau)$, where $\tau$ is some tiny number, e.g. 0.001. 
+
+Note that we did not choose a prior for the treatment effect itself. Instead, we're effectively saying that both experiment arms have the same mean and can take almost any value with the same likelihood.
+
+However, we can see what kind of treatment effect prior distribution our choice implies by leveraging the fact that a difference between two independent normal distributions is just another normal distribution:
+
+$$
+\text{if } X \sim N(\mu_x, s_x^2), Y \sim N(\mu_y, s_y^2)\, \text{ then } (X - Y) \sim N(\mu_x - \mu_y, s_x^2 + s_y^2)
+$$
+
+```{r}
+difference_of_two_normals = function(X, Y) {
+  list (
+    mean = X$mean - Y$mean,
+    tau = 1 / ((1 / X$tau) + (1 / Y$tau)),
+    sd = sqrt((1 / X$tau) + (1 / Y$tau))
+  )
+}
+
+
+difference_of_two_normals(list(mean=0, tau=0.001), list(mean=0, tau=0.001)) |> 
+  as_tibble() |> pivot_longer(everything(), names_to = 'statistic') |>
+  kbl(caption='Implied treatment effect prior distribution') |> 
+  kable_minimal(full_width = T, position='left')
+
+```
+
+We can see that choosing a prior for experiment results of zero mean and $\tau=0.001$ (or, equivalently, the standard deviation of $\sqrt(\frac{1}{0.001})=31.6$) yields a prior on the treatment effect that also has a zero mean but has even more uncertainty, with a standard deviation of $44.7$.
+
+Next, we need to get to posterior distributions. Luckily, a normal prior and a normal likelihood form a conjugate pair that yields a normal posterior distribution, so we can do this algebraically. 
+
+Specifically, suppose the prior distribution is $P_0 \sim N(\mu_0, \tau_0^{-1})$, the observed mean is $\bar{X}$ and observed precision is $\bar{\tau} = \frac{1}{s^2_x}$. Then the posterior is $P \sim N \left(\frac{\tau_0 \mu_0+\bar{\tau} \bar{X} n}{\tau_0+ n \bar{\tau}},\left(\tau_0+n \bar{\tau}\right)^{-1}\right)$. Let's calculate the posteriors for our samples.
+
+```{r}
+
+calculate_normal_posterior = function(X, prior) {
+  n = length(X)
+  observed_mu = mean(X)
+  observed_tau = 1 / var(X)
+  
+  list(
+    mean = (prior$tau * prior$mean + observed_tau * observed_mu * n) / (prior$tau + n * observed_tau),
+    tau = (prior$tau + n * observed_tau),
+    sd = sqrt(1 / (prior$tau + n * observed_tau))
+  )
+}
+
+A_posterior = calculate_normal_posterior(A, list(mean=0, tau=0.001))
+B_posterior = calculate_normal_posterior(B, list(mean=0, tau=0.001))
+
+bind_rows(A_posterior, B_posterior, .id = 'ID') |> 
+  mutate(ID = str_replace_all(ID, c('1'='A', '2'='B'))) |>
+  kbl(caption='Posterior distributions of experiment arms') |> 
+  kable_minimal(full_width = T, position='left')
+
+```
+
+We have posterior distributions for the data of the two samples, but we are after the treatment effect - i.e., the difference between the two samples. We can use the same approach as we did previously when estimating the implied treatment effect prior previously and calculate it, as the two posteriors can be assumed to be independent, too.
+
+```{r}
+
+treatment_posterior = difference_of_two_normals(B_posterior, A_posterior)
+treatment_posterior |> as_tibble() |> pivot_longer(everything(), names_to = 'statistic') |>
+  kbl(caption='Posterior distribution of the treatment effect') |> 
+  kable_minimal(full_width = T, position='left')
+```
+
+Let's visualize it.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show code"
+
+ggplot() + geom_function(
+  fun = dnorm, 
+  args = within(treatment_posterior, rm("tau"))
+) + xlim(-0.1, 0.1) + 
+  geom_vline(xintercept=0, color='red', linetype='dashed') + 
+  xlab("") + ggtitle("PDF the treatment effect") + ylab("Density") +
+  theme_light() + theme(panel.grid=element_blank())
+```
+
+That looks familiar! Let's overlay the sampling distribution from the t-test:
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show code"
+
+ggplot() + geom_function(
+  fun = dnorm, 
+  args = within(treatment_posterior, rm("tau")),
+  aes(color = 'Posterior of a treatment effect'),
+  linetype='dashed'
+) + xlim(-0.1, 0.1) + 
+  geom_function(
+  fun = dnorm, 
+  args = sdist,
+  aes(color = 'Sampling distribution'),
+  linetype='twodash'
+) + xlab("") + ggtitle("Treatment effect posterior distribution vs. Sampling distribution") + 
+  ylab("Density") + labs(color='') +
+  theme_light() + theme(panel.grid=element_blank(), legend.position='bottom')
+```
+
+They are identical! This means that the probability of the treatment effect being smaller than zero is—you guessed it—equal to 1/2 of a two-sided p-value—or, in other words, identical to the one-sided p-value.
+
+![](t-test%20vs.%20bayes.jpg){fig-align="center"}
+
+This is no coincidence. We can prove that mathematically. Here's the posterior formula again:
+
+$$
+P \sim N \left(\frac{\tau_0 \mu_0+\bar{\tau}\bar{X}n}{\tau_0+ n \bar\tau},\left(\tau_0+n \bar\tau\right)^{-1}\right)
+$$
+
+Now, if we let the prior variance go to infinity, the $\tau_0$ term goes to zero. In that case, the posterior simplifies to:
+
+$$
+P \sim N \left(\bar{X},\left(n \bar\tau\right)^{-1}\right)
+$$
+
+We can plug it into the formula for calculating the difference between two normal distributions:
+
+$$
+(X - Y) \sim N(\mu_x - \mu_y, s_x^2 + s_y^2) = N(\bar{X} - \bar{Y}, \frac{1}{n_X \tau_X} + \frac{1}{n_Y \tau_Y}) = N(\bar{X} - \bar{Y}, \frac{s_X^2}{n_X} + \frac{s^2_Y}{n_Y})
+$$
+
+What we get is precisely the sampling distribution used in the frequentist t-test.
+
+**So, no, it's not true that using uninformative priors will yield rubbish results in an A/B test**. In fact, you'll get precisely the same results as a one-sided p-value, which also means you have the same statistical guarantees. If your decision criterion is to look at experiment results once and adopt the treatment when the probability that it is above zero is 95% or more (and thus the probability it's below zero is 5% or less), you will be right 95% of the time, just like you would if you were to rely on p-values and statistical significance.
+
+It also shows that Bayesian methods are not immune to peeking (as the results are equivalent to a t-test which isn't either). Peeking is either addressed by informative priors or by [reframing the errors you care about altogether](http://varianceexplained.org/r/bayesian-ab-testing/).
+
+### One-sided vs. two-sided p-values
+
+At first, the fact that the Bayesian approach leads to a one-sided p-value confused me a bit. I always found one-sided tests weird. _What do you mean you are testing only in one direction?_ I understand that there may be situations where only a single direction matters, but in an A/B testing context, where the outcome metric is a business KPI, surely you want to know if it's positive or negative? And how _stupid_ it would be when you upfront choose to test only in a positive direction but the observed effect is negative and then you don't report whether it's statistically significant from zero?
+
+For a minute, I thought perhaps all those people arguing for one-sided tests were right. But then I came across this thread on X/Twitter:
+
+<blockquote class="twitter-tweet"><p lang="en" dir="ltr">My take on two-sided tests.🧵<br><br>You shouldn’t use them.<br><br>Compromise: You can use a two-sided test if you agree not to *even look* at the sign.<br><br>If you use a “two-sided test” and claim “X increases Y,” then your claim doesn’t have the nominal error rate.<br><br>👇more thoughts👇</p>&mdash; Carlisle Rainey (@carlislerainey) <a href="https://twitter.com/carlislerainey/status/1774155426860237198?ref_src=twsrc%5Etfw">March 30, 2024</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script> 
+
+And indeed, technically, if you do a two-sided t-test, all you obtain is an estimation of whether the effect is not zero. To be able to claim that it is larger/smaller than zero, you need two one-sided t-tests instead. Of course, because you are now doing two tests instead of one, you need to adjust for multiple comparisons, so to achieve a 5% Type I error rate, you need to use $\alpha=0.025$. 
+
+This is all horribly confusing if you ask me. Let's move on.
+
+### A non-Gaussian case
+
+You may rightfully wonder if the above result extends to non-Gaussian situations. I can't prove it mathematically, but numerical simulations tell me the answer is yes. Let's consider the most popular A/B testing situation involving binary outcomes (e.g., conversion rates).
+
+-   Our outcome metric follows the Bernoulli distribution: $X \sim \text{Bernoulli}(p)$. Because the individual user observations are independent, we can interpret the entire sample with $n$ observations and $k$ successes as a binomial distribution with rate $p$.
+
+-   We will use uninformative beta distribution priors $P_0 \sim \text{Beta}(\alpha_0=1,\beta_0=1)$
+
+-   The posterior of a beta prior and binomial likelihood is another conjugate pair, resulting in a beta distribution with parameters $\alpha=\alpha_0 + k, \beta = \beta_0 + (n - k)$.
+
+We will also need to be able to calculate a difference between two random variables following Beta distributions. A [closed-form solution](https://www.tandfonline.com/doi/abs/10.1080/03610929308831114) exists to calculate this difference, but it involves Appell F1 hypergeometric functions that I couldn't get to work with large $n$. So instead, we will rely on the fact that a [sum/difference of two independent PDFs can be calculated using convolutions](https://www.countbayesie.com/blog/2022/11/30/understanding-convolutions-in-probability-a-mad-science-perspective).
+
+Let's generate some data. We'll use a baseline of $0.17$, an effect size of $0.02$, and a group size of 6,000, which should yield us \~80% power.
+
+```{r, echo=T}
+eff = 0.02
+baseline = 0.17
+n_group = 6000
+
+power.prop.test(n=n_group, p1 = baseline, p2 = baseline + eff, sig.level=0.05)
+```
+
+Let's define a couple of helper functions.
+
+```{r}
+get_samples = function(n_group, baseline, eff) {
+  list(
+    A = rbinom(n_group, 1, baseline),
+    B = rbinom(n_group, 1, baseline + eff)
+  )
+}
+
+calculate_beta_posterior = function(X, prior){
+  list(
+    alpha = prior$alpha + sum(X),
+    beta = prior$beta + (length(X) - sum(X))
+  )
+}
+
+#calculate density at a given point X for the difference between two beta distributions
+pdf_beta_diff = function(X, d1, d2) {
+  
+  sapply(X, function(t) {
+    integrate(function(i) {
+      (dbeta(i, d1$alpha, d1$beta) * dbeta(i-t, d2$alpha, d2$beta) + dbeta(i, d2$alpha, d2$beta) * dbeta(i+t, d1$alpha, d1$beta)) / 2
+    }, lower=-Inf, upper=Inf, stop.on.error = F)$value
+    })
+  
+}
+
+#calculate a total CDF between X and Y for two beta distributions
+cdf_beta_diff = function(X, Y, d1, d2) {
+  integrate(pdf_beta_diff, d1, d2, lower=X, upper=Y, stop.on.error = F)$value
+}
+```
+
+Now, let's draw one sample and do the calculations.
+
+```{r}
+set.seed(42)
+data = get_samples(n_group, baseline, eff)
+sdist = sampling_distribution(data$B, data$A)
+sdist |>as_tibble() |>
+  pivot_longer(everything(), names_to = "statistic") |> 
+  kbl(caption='Summary statistics of the sampling distribution') |> 
+  kable_minimal(full_width = T, position='left')
+```
+
+```{r}
+A_posterior = calculate_beta_posterior(data$A, list(alpha=1, beta=1))
+B_posterior = calculate_beta_posterior(data$B, list(alpha=1, beta=1))
+```
+
+Let's visualize the posterior vs. the sampling distribution.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show code"
+
+ggplot() + geom_function(
+  fun = pdf_beta_diff, 
+  args = list(d1=B_posterior, d2=A_posterior),
+  aes(color = 'Posterior of treatment effect'),
+  linetype='twodash'
+) + xlim(-0.05, 0.05) + 
+  geom_function(
+  fun = dnorm, 
+  args = sdist,
+  aes(color = 'Sampling distribution'),
+  linetype='dotted'
+) + xlab("") + ggtitle("Treatment effect posterior distribution vs. Sampling distribution") + 
+  ylab("Density") + labs(color='') +
+  theme_light() + theme(panel.grid=element_blank(), legend.position='bottom')
+```
+
+And compare one-sided p-value vs. posterior probability that treatment is below zero.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show code"
+#| 
+tibble(
+  statistic = c('One-sided p-value', 'Probabability treatment is < 0'), 
+  value = c(
+    t.test(data$B, data$A, alternative='g')$p.value, 
+    cdf_beta_diff(-Inf, 0, B_posterior, A_posterior)
+  )
+) |> kbl(caption='P-value vs. Bayesian estimate of treatment effect < 0') |> 
+  kable_minimal(full_width = T, position='left')
+```
+
+Everything looks identical. To be sure, we can repeat the procedure 1000 times.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show code"
+
+sim_results = sapply(1:1000, function(i) {
+  data = get_samples(n_group, baseline, eff)
+  A_posterior = calculate_beta_posterior(data$A, list(alpha=1, beta=1))
+  B_posterior = calculate_beta_posterior(data$B, list(alpha=1, beta=1))
+  posterior_prob_above_zero = cdf_beta_diff(-Inf, 0, B_posterior, A_posterior)
+  p_value = t.test(data$B, data$A, alternative='g')$p.value
+  c(posterior_prob_above_zero, p_value)
+})
+```
+
+```{r, echo=FALSE, message=F, warning=F}
+#| code-fold: true
+#| code-summary: "Show code"
+
+sim_results |> t() |> as_tibble(.name_repair = "unique") |> 
+  rename_with(function(x) c('X', 'Y')) |>
+  ggplot() + geom_point(aes(x=X, y=Y)) + labs(
+  x = 'Posterior probability that treatment < 0', y="One-sided p-value"
+) + geom_abline(slope=1, intercept = 0, color='red') + 
+  ggtitle('Bayesian posterior probability vs. Frequentist p-value: 1000 simulations') +
+  theme_light() + theme(panel.grid=element_blank(), legend.position='bottom')
+```
+
+I hope that's convincing. 
+
+All those difficulties with interpreting p-values? A p-value is not a measure for evidence, etc.? Well, I think I have proven to myself (and hopefully, you, too) that if we are willing to assume that we are equally likely to observe data of any value, then *under our very simple and restrictive setting of two independent samples with data generating process following Normal distribution (or distribution that converges to Normal, such as Beta)*:
+
+-   A one-sided p-value is equal to the probability that the treatment is negative;
+
+-   (1 - p-value) is equal to the probability that the treatment is positive (gasp!)
+
+In other words, we can all run t-tests and report p-values as probabilities of treatment effects. No more worrying about explaining statistical significance!
+
+Sure, I am joking. **Or am I?** 
+
+One good reason not to do that is because the assumption of flat priors is a pretty bad one. If you're running conversion tests on a website, surely you know better than to say, "Ah, it can be anything." So maybe that's the answer to the people who want to misinterpret p-values as measures of evidence — "Yes, it's a probability of treatment being better/worse, but only if you're assuming our conversion rates can be anything."
