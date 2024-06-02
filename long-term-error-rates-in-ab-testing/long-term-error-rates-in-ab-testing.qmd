@@ -9,7 +9,8 @@ format:
     fig-align: "center"
     fig-height: 4
     fig-width: 8
-    page-layout: custom
+    #page-layout: custom    
+output-dir: docs
 editor: visual
 html-math-method: mathml
 ---

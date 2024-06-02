@@ -3293,7 +3293,9 @@ border: 0;
 
 <body class="fullcontent">
 
-<div class="page-layout-custom">  
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
@@ -3327,7 +3329,7 @@ border: 0;
 <p>Understanding the relationship between experiment-level design parameters (minimum detectable effect (MDE), sample size, power) and overall experimentation program win/detection/error rates can be pretty illuminating. So, let’s figure out how to do it.</p>
 <p>This blog post is accompanied by an interactive <a href="https://ab-testing-long-term-error-rates.streamlit.app/">Streamlit app</a> where you can explore how all the different parameters come to life yourself.</p>
 <section id="from-statistical-power-to-detectionwin-rates" class="level2">
-<h2 data-anchor-id="from-statistical-power-to-detectionwin-rates">From statistical power to detection/win rates</h2>
+<h2 class="anchored" data-anchor-id="from-statistical-power-to-detectionwin-rates">From statistical power to detection/win rates</h2>
 <p>You may wonder why the answer to long-term detection rates isn’t simply the Type II error rate or “We will detect (i.e., declare them as statistically significant) differences when they exist 80% of the time”.</p>
 <p>That’s because the Type II error rate is conditional on the MDE. Assuming you use the same MDE all the time, you can claim that when the actual effect is at least as large as the MDE, we will detect it at least 80% of the time.</p>
 <p>But what if it’s not? And how exactly does one think about the “at least” part of the statement? What if actual effects are larger/smaller than MDE? Your power will be exactly 80% only if you always choose MDE precisely equal to the actual unobservable difference for that specific experiment. If you can do that, you don’t need to experiment!</p>
@@ -3349,7 +3351,7 @@ border: 0;
 <p>If your immediate reaction is, “OMG, a subjective assumption on effect size distribution (gasp!)”, I would like to remind you that choosing the MDE threshold for power calculations is subjective, too. Ideally, one would pick an MDE upfront and tune the sample size to achieve the desired statistical power. However, in practice, <a href="https://aurimas.eu/blog/2023/02/getting-faster-to-decisions-in-a-b-tests-part-2-misinterpretations-and-practical-challenges-of-classical-hypothesis-testing/">there’s always an incentive to cherry-pick an MDE itself</a>, given a fixed sample size. It looks better to report a power of 80% with an MDE of 0.015 than a power of 50% with an MDE of 0.01.</p>
 <p>Having said that, if you use MDE correctly and report statistical power together with the MDE, bad MDE choices are more transparent than flawed effect size distribution assumptions. But if we want to estimate average detection/win rates, that’s the cost we need to pay - there’s no free lunch!</p>
 <section id="selecting-an-effect-size-distribution" class="level3">
-<h3 data-anchor-id="selecting-an-effect-size-distribution">Selecting an effect size distribution</h3>
+<h3 class="anchored" data-anchor-id="selecting-an-effect-size-distribution">Selecting an effect size distribution</h3>
 <p>So, how do we select a potential effect size distribution?</p>
 <ul>
 <li><p>Historical experiment results could be a good starting point for understanding where most of the distribution density should be. If most experiments see effect sizes of a few percentage points, then the distribution should reflect that, too. Importantly, we should consider observed treatment effects in all experiments, not just the statistically significant ones.</p></li>
@@ -3459,19 +3461,19 @@ border: 0;
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">Startup team</td>
-<td style="text-align: right;">0.0201</td>
-<td style="text-align: right;">-0.0180</td>
-<td style="text-align: right;">0.0199</td>
+<td style="text-align: right;">0.0197</td>
+<td style="text-align: right;">-0.0186</td>
+<td style="text-align: right;">0.0196</td>
 <td style="text-align: right;">0.0584</td>
-<td style="text-align: right;">0.7505</td>
+<td style="text-align: right;">0.7427</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">Mature team</td>
 <td style="text-align: right;">0.0050</td>
 <td style="text-align: right;">-0.0023</td>
 <td style="text-align: right;">0.0034</td>
-<td style="text-align: right;">0.0143</td>
-<td style="text-align: right;">0.7366</td>
+<td style="text-align: right;">0.0145</td>
+<td style="text-align: right;">0.7370</td>
 </tr>
 </tbody>
 </table>
@@ -3482,7 +3484,7 @@ border: 0;
 <p>Note that both teams are expected to produce nearly the same (~75%) share of experiments that have a positive impact. We could interpret that as both teams having a similar “quality of ideas.” It’s just that the effect sizes differ due to the different contexts in which they operate - a median experiment of the mature team is assumed to produce just a 0.3ppt effect, while the startup team - 2ppt, a 6x difference.</p>
 </section>
 <section id="estimating-average-expected-detectionwin-rates" class="level3">
-<h3 data-anchor-id="estimating-average-expected-detectionwin-rates">Estimating average expected detection/win rates</h3>
+<h3 class="anchored" data-anchor-id="estimating-average-expected-detectionwin-rates">Estimating average expected detection/win rates</h3>
 <p>To estimate detection/win rates, we need a few more inputs. Let’s assume that:</p>
 <ul>
 <li><p>Both teams are optimizing a metric that has a baseline of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>0.17</mn><annotation encoding="application/x-tex">0.17</annotation></semantics></math></p></li>
@@ -3612,7 +3614,7 @@ NOTE: n is number in *each* group</code></pre>
 </section>
 </section>
 <section id="impact-of-sample-size" class="level2">
-<h2 data-anchor-id="impact-of-sample-size">Impact of sample size</h2>
+<h2 class="anchored" data-anchor-id="impact-of-sample-size">Impact of sample size</h2>
 <p>How do win and detection rates change with the sample size? We can plot win and detection rates as a function of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>.</p>
 <div class="cell">
 <details class="code-fold">
@@ -3694,7 +3696,7 @@ NOTE: n is number in *each* group</code></pre>
 </ul>
 </section>
 <section id="what-about-the-type-i-error-rate-in-this-context" class="level2">
-<h2 data-anchor-id="what-about-the-type-i-error-rate-in-this-context">What about the Type I error rate in this context?</h2>
+<h2 class="anchored" data-anchor-id="what-about-the-type-i-error-rate-in-this-context">What about the Type I error rate in this context?</h2>
 <p>We saw how to go from statistical power / Type II error rate to long-term detection/win rates. Can we do the same with the Type I error rate?</p>
 <p>Well, the thing is that the Type I error rate is only relevant if some experiments have zero impact. It’s not “close enough” to zero, but literally zero. In reality, (hopefully!) you don’t run such experiments. It works for individual experiments because the frequentist hypothesis testing framework asks “how likely we would have observed data like the one at hand if the true effect was zero” and not “how likely the true effect is zero.” But this question doesn’t translate to a series of experiments.</p>
 <p>Additionally, the Type I error rate does not depend on the data you collect (sample size, variance). Even if you assume that some experiments have precisely zero impact, all you can do is choose Type I error rate with <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math>; you can’t influence it beyond that choice.</p>
@@ -3735,14 +3737,14 @@ NOTE: n is number in *each* group</code></pre>
 </div>
 <p>But in the spirit of focusing on “error rates,” let’s explore some other error types - meet Type S and Type M error rates.</p>
 <section id="type-m-and-s-errors" class="level3">
-<h3 data-anchor-id="type-m-and-s-errors">Type M and S errors</h3>
+<h3 class="anchored" data-anchor-id="type-m-and-s-errors">Type M and S errors</h3>
 <p><a href="https://journals.sagepub.com/doi/10.1177/1745691614551642">Gelman and Carlin</a> (2014) introduced two other metrics to use in statistical inference:</p>
 <ul>
 <li><strong>Type S (sign) error.</strong> It’s the probability that an observed difference, when declared statistically significant, has an opposite sign than the actual difference. In other words, it is the probability that you will make a decision that is opposite to what you are after. It directly relates to the practical implications of making a wrong decision. In a lot of situations, rolling out a zero-impact change is not the end of the world. Rolling out something that has an impact opposite to the one estimated in an experiment? That’s bad!</li>
 <li><strong>Type M (Magnitude) error</strong> measures how much the observed difference, when declared statistically significant, differs from the actual difference, expressed as a ratio. It partially addresses the issue of quantifying the risk of saying “effect sizes so small that they don’t practically matter” as statistically significant and is closely related to the <a href="https://www.etsy.com/codeascraft/mitigating-the-winners-curse-in-online-experiments?utm_source=pocket_reader">winner’s curse phenomenon</a>. I like Type M error a lot because it provides a rigorous quantification of the hand-wavy statement, “Yeah, the results are statistically significant, but I would not trust them due to the small sample size.” It provides a bridge between sample size and Type I error rate.</li>
 </ul>
 <section id="calculating-type-s-and-m-error-rates" class="level4">
-<h4 data-anchor-id="calculating-type-s-and-m-error-rates">Calculating Type S and M error rates</h4>
+<h4 class="anchored" data-anchor-id="calculating-type-s-and-m-error-rates">Calculating Type S and M error rates</h4>
 <p>The original paper proposed calculating Type S and M error rates via simulation. using a function. In 2019, <a href="https://pubmed.ncbi.nlm.nih.gov/29569719/">Lu, Qui, and Deng</a> published a paper that included closed-form formulas for these error rates. Their implementation is below (and can be easily extended to unequal sample size designs).</p>
 <p>The rates are a function of four parameters: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>A</mi><annotation encoding="application/x-tex">A</annotation></semantics></math>, the effect size; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>σ</mi><annotation encoding="application/x-tex">\sigma</annotation></semantics></math>, the observed standard deviation of a metric; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math>, the chosen level of statistical significance; and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>, the sample size.</p>
 <p><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>A</mi><annotation encoding="application/x-tex">A</annotation></semantics></math>, conceptually, is a <em>hypothesized</em> effect size. That’s not the same as <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>M</mi><mi>D</mi><mi>E</mi></mrow><annotation encoding="application/x-tex">MDE</annotation></semantics></math> - arguably, in a well-designed experiment, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>M</mi><mi>D</mi><mi>E</mi></mrow><annotation encoding="application/x-tex">MDE</annotation></semantics></math> should always be smaller than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>A</mi><annotation encoding="application/x-tex">A</annotation></semantics></math>, as it’s the minimum effect size you’re interested in detecting.</p>
@@ -3903,7 +3905,7 @@ NOTE: n is number in *each* group</code></pre>
 </section>
 </section>
 <section id="obtaining-long-term-sign-error-exaggeration-rates" class="level3">
-<h3 data-anchor-id="obtaining-long-term-sign-error-exaggeration-rates">Obtaining long-term sign-error / exaggeration rates</h3>
+<h3 class="anchored" data-anchor-id="obtaining-long-term-sign-error-exaggeration-rates">Obtaining long-term sign-error / exaggeration rates</h3>
 <p>Type M and S rates depend on a hypothesized effect size <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>A</mi><annotation encoding="application/x-tex">A</annotation></semantics></math>, just like the Type II error rate depends on <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>M</mi><mi>D</mi><mi>E</mi></mrow><annotation encoding="application/x-tex">MDE</annotation></semantics></math>, so we’ll need the same integration approach to get to long-term “average” rates. We’ll also tweak the definitions a bit and calculate:</p>
 <ul>
 <li><p>Expected “sign error rate” - the % of experiments where we will declare the results statistically significant, but the observed treatment effect will have an opposite sign than the actual treatment effect. We’ll use all experiments as the denominator here, which is slightly different from the Type S error rate definition. If needed, we can divide this rate by the average detection rate to get back to the original definition.</p></li>
@@ -3993,7 +3995,7 @@ NOTE: n is number in *each* group</code></pre>
 </section>
 </section>
 <section id="conclusion" class="level2">
-<h2 data-anchor-id="conclusion">Conclusion</h2>
+<h2 class="anchored" data-anchor-id="conclusion">Conclusion</h2>
 <p>So, what’s the TLDR?</p>
 <ul>
 <li><p>A low observable win rate of (e.g., <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>25</mn><mi>%</mi></mrow><annotation encoding="application/x-tex">25\%</annotation></semantics></math>) doesn’t necessarily mean that the team produces winning ideas infrequently. It may simply be that the impact those ideas have tends to be smaller than you can reliably detect.</p></li>
@@ -4009,7 +4011,7 @@ NOTE: n is number in *each* group</code></pre>
 <p>And, if you want to play around with effect size distrubution assumptions and see corresponding win/detection/sign error rates - I made a small <a href="https://ab-testing-long-term-error-rates.streamlit.app/">Streamlit app</a> just for that.</p>
 </section>
 <section id="appendix---dont-trust-the-maths" class="level2">
-<h2 data-anchor-id="appendix---dont-trust-the-maths">Appendix - Don’t trust the maths</h2>
+<h2 class="anchored" data-anchor-id="appendix---dont-trust-the-maths">Appendix - Don’t trust the maths</h2>
 <p>Integration formulas look fancy, but do they work? I ran another simulation to double-check—it looks like it all adds up, with exception of exaggeration ratios that are a bit off. I suspect that differences arise from numerical approximations in integration.</p>
 <div class="cell">
 <details class="code-fold">
@@ -4090,19 +4092,19 @@ NOTE: n is number in *each* group</code></pre>
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">Startup team</td>
-<td style="text-align: right;">0.5033</td>
-<td style="text-align: right;">0.0028</td>
+<td style="text-align: right;">0.5001</td>
+<td style="text-align: right;">0.0026</td>
 <td style="text-align: right;">0.0057</td>
-<td style="text-align: right;">0.0056</td>
+<td style="text-align: right;">0.0053</td>
 <td style="text-align: right;">0.0114</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">Mature team</td>
-<td style="text-align: right;">0.0994</td>
-<td style="text-align: right;">0.0125</td>
+<td style="text-align: right;">0.0992</td>
+<td style="text-align: right;">0.0122</td>
 <td style="text-align: right;">0.0022</td>
-<td style="text-align: right;">0.1262</td>
-<td style="text-align: right;">0.0225</td>
+<td style="text-align: right;">0.1234</td>
+<td style="text-align: right;">0.0224</td>
 </tr>
 </tbody>
 </table>
@@ -4176,7 +4178,8 @@ NOTE: n is number in *each* group</code></pre>
 </div>
 </section>
 
-
+</main>
+<!-- /main column -->
 <script id="quarto-html-after-body" type="application/javascript">
 window.document.addEventListener("DOMContentLoaded", function (event) {
   const toggleBodyColorMode = (bsSheetEl) => {
@@ -4564,7 +4567,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
   }
 });
 </script>
-</div> <!-- /container fluid -->
+</div> <!-- /content -->
 
 
 
