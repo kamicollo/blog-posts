@@ -1,0 +1,259 @@
+
+# Can we stop bashing bayesian methods in the context of A/B testing, please? 
+
+Bayesian vs. frequentist. "The never ending debate". Boooring. It's just maths, after all. Well, that, and the fundamental interpretation of probability. In the end, an experienced data scientist / statistician should be able to use the tools from either domain, depending on the problem at hand. 
+
+I spend a lot of time with online experiments. At WW, we have our own in-house experimentation platform, but I find it helpful to keep up with the content produced by vendors in the space. And lately, I came across some gems. 
+
+Here's an opening paragraph from Optimizely blog post with a telling URL https://www.optimizely.com/insights/blog/why-you-should-choose-sequential-testing-and-not-bayesian/:
+
+> Full Bayesian methods are about as useful for large-scale online experiments as a chemical dumpster fire. Bayesian methods offer a probability-based perspective, integrating prior knowledge and current data. If you make the wrong choice, like poorly selecting in the critical first step which statistical distribution you should set as your prior, your online experiment is going to be as slow as molasses.  
+
+**Chemical dumpster fire**? OK..
+
+Eppo (whose content I usually very much enjoy!) recently [published a post](https://www.geteppo.com/blog/comparing-frequentist-vs-bayesian-approaches) "Comparing Frequentist vs. Bayesian vs. Sequential Approaches to A/B Testing" where they compare "Bayesian analysis" to frequentist methodologies, such as hybrid sequential tests, fully sequential tests, group sequential tests and a simple t-test. While, overall, it's a good read, but when it comes to Bayesian analysis assessment it includes statements such as 
+
+> When to use Bayesian tests
+
+> Whether to use a frequentist or Bayesian approach often boils down to preference, but here are some other subjective reasons:
+
+  > [...] If you prefer having the ease of explaining results over the rigor of strong statistical guarantees
+  
+Sure.. now that's a positive reason that any self-respective scientist or experimentation lead would consider, right? 
+  
+
+Finally, Ron Kohavi published a [note on LinkedIn](https://www.linkedin.com/posts/ronnyk_draft-note-p-values-and-bayes-factors-in-activity-7170716579750432769-UyNu) where he uses Bayes factors, and points out that online Bayes calculators seem to be overly optimistic. The note and the thread is worth skimming through, but the overall conclusion seems to also lean towards "nope, Bayesian methods are not worth it".
+
+
+
+
+```{r}
+
+library(ggplot2)
+
+eff = 0.25
+baseline = 2.5
+sd_baseline = 0.5
+n_group = 5000
+
+
+power.t.test(n=n_group, delta = eff, sd=sd_baseline, sig.level=0.05)
+
+
+```
+```{r}
+
+A = rnorm(n_group, mean = baseline, sd = sd_baseline)
+B = rnorm(n_group, mean = baseline + eff, sd = sd_baseline)
+t.test(B,A)
+
+```
+
+```{r}
+
+mean_diff = mean(B) - mean(A)
+st_error = sqrt(var(A)/n_group + var(B)/n_group)
+observed_tau = 1/(st_error ^ 2)
+
+t_val = mean_diff / st_error
+print(t_val)
+print(mean_diff)
+print(st_error)
+
+print(mean_diff - st_error * qnorm(0.975))
+print(mean_diff + st_error * qnorm(0.975))
+
+```
+```{r}
+
+prior_mu = baseline
+prior_tau = 1 / (sd_baseline ** 2) * 100 #equal to variance of 100, sd=10
+
+
+get_posterior = function(X, prior_mu, prior_tau) {
+  
+  observed_sd = var(X)
+  observed_tau = 1 / observed_sd
+
+posterior_mu = (prior_tau * prior_mu + observed_tau * mean(X) * length(X)) / (
+  prior_tau + length(X) * observed_tau
+)
+
+posterior_tau = prior_tau + length(X) * observed_tau
+posterior_sd = sqrt(1 / posterior_tau)
+  
+c(posterior_mu, posterior_sd)
+}
+
+
+r = get_posterior(B - A, prior_mu, prior_tau)
+posterior_mu = r[1]
+posterior_sd = r[2]
+
+print(posterior_mu)
+print(posterior_sd)
+
+r = get_posterior(B, prior_mu, prior_tau)
+posterior_mu_B = r[1]
+posterior_sd_B = r[2]
+
+r = get_posterior(A, prior_mu, prior_tau)
+posterior_mu_A = r[1]
+posterior_sd_A = r[2]
+
+posterior_mu_diff = posterior_mu_B - posterior_mu_A
+posterior_sd_diff = sqrt(posterior_sd_A ** 2 + posterior_sd_B ** 2)
+
+print(posterior_mu_diff) 
+print(posterior_sd_diff)
+
+```
+
+```{r}
+fr = dnorm(seq(from=-0.1, to=0.5, by=0.001), mean=mean_diff, sd=st_error)
+bayes = dnorm(seq(from=-0.1, to=0.5, by=0.001), mean=posterior_mu_diff, sd=posterior_sd_diff)
+
+dt = tibble(fr = fr, bayes = bayes, x=seq(from=-0.1, to=0.5, by=0.001)) |> pivot_longer(names_to="procedure", cols=c("fr", "bayes")) 
+
+dt |> ggplot() + aes(x=x, color=procedure, y=value,linetype=procedure) + geom_line()
+```
+
+
+```{r}
+
+```
+```{r}
+
+eff = 0.0
+baseline = 0.17
+n_group = 5000
+
+
+power.prop.test(n=n_group, p1 = baseline, p2 = baseline + eff, sig.level=0.05)
+
+
+```
+```{r}
+A = rbinom(n_group, 1, baseline)
+B = rbinom(n_group, 1, baseline + eff)
+
+t.test(B, A, alternative="g")
+prop.test(c(sum(B), sum(A)), c(length(B), length(A)), alternative = "g", correct=F)
+
+mean_diff = mean(B) - mean(A)
+st_error = sqrt(var(A)/n_group + var(B)/n_group)
+print(mean_diff)
+```
+```{r}
+prior_alpha = 1
+prior_beta = 1
+
+get_posterior = function(X, alpha, beta) {
+  c(
+    alpha + sum(X),
+    beta + length(X) - sum(X)
+  )
+}
+
+r = get_posterior(A, prior_alpha, prior_beta)
+
+posterior_A_alpha = r[1]
+posterior_A_beta = r[2]
+
+r = get_posterior(B, prior_alpha, prior_beta)
+
+posterior_B_alpha = r[1]
+posterior_B_beta = r[2]
+
+get_beta_diff = function(X, a1, b1, a2, b2) {
+  
+  sapply(X, function(t) {
+    integrate(function(i) {
+      (dbeta(i, a1, b1) * dbeta(i-t, a2, b2) + dbeta(i, a2, b2) * dbeta(i+t, a1, b1)) / 2
+    }, lower=-Inf, upper=Inf)$value
+    })
+  
+}
+
+```
+
+
+```{r}
+sq =seq(from=eff-eff*2 +ifelse(eff==0,-0.05,0), to=eff*2+ifelse(eff==0,0.05,0), by=0.001)
+fr = dnorm(sq, mean=mean_diff, sd=st_error)
+bayes = get_beta_diff(sq, a1 = posterior_B_alpha, b1=posterior_B_beta, a2 = posterior_A_alpha, b2 = posterior_A_beta)
+
+dt = tibble(fr = fr, bayes = bayes, x=sq) |> pivot_longer(names_to="procedure", cols=c("fr", "bayes")) 
+
+dt |> ggplot() + aes(x=x, color=procedure, y=value,linetype=procedure) + geom_line()
+
+```
+```{r}
+pnorm(0, mean_diff, st_error)
+
+
+integrate(get_beta_diff, lower=-Inf, upper = 0, posterior_B_alpha, posterior_B_beta, posterior_A_alpha, posterior_A_beta)
+```
+
+```{r}
+A = rgamma(n_group, 2, 2)
+B = rgamma(n_group, 20, 20)
+
+t.test(B, A, alternative="g")
+
+mean_diff = mean(B) - mean(A)
+st_error = sqrt(var(A)/n_group + var(B)/n_group)
+print(mean_diff)
+```
+
+```{r}
+prior_alpha = 0.001
+prior_beta = 0.001
+
+library(dglm)
+
+get_posterior = function(X, alpha, beta) {
+  c(
+    alpha + sum(X),
+    beta + length(X) - sum(X)
+  )
+}
+
+r = get_posterior(A, prior_alpha, prior_beta)
+
+posterior_A_alpha = r[1]
+posterior_A_beta = r[2]
+
+r = get_posterior(B, prior_alpha, prior_beta)
+
+posterior_B_alpha = r[1]
+posterior_B_beta = r[2]
+
+get_beta_diff = function(X, a1, b1, a2, b2) {
+  
+  sapply(X, function(t) {
+    integrate(function(i) {
+      (dbeta(i, a1, b1) * dbeta(i-t, a2, b2) + dbeta(i, a2, b2) * dbeta(i+t, a1, b1)) / 2
+    }, lower=-Inf, upper=Inf)$value
+    })
+  
+}
+
+```
+
+
+```{r}
+sq =seq(from=eff-eff*2 +ifelse(eff==0,-0.05,0), to=eff*2+ifelse(eff==0,0.05,0), by=0.001)
+fr = dnorm(sq, mean=mean_diff, sd=st_error)
+bayes = get_beta_diff(sq, a1 = posterior_B_alpha, b1=posterior_B_beta, a2 = posterior_A_alpha, b2 = posterior_A_beta)
+
+dt = tibble(fr = fr, bayes = bayes, x=sq) |> pivot_longer(names_to="procedure", cols=c("fr", "bayes")) 
+
+dt |> ggplot() + aes(x=x, color=procedure, y=value,linetype=procedure) + geom_line()
+
+```
+```{r}
+pnorm(0, mean_diff, st_error)
+
+
+integrate(get_beta_diff, lower=-Inf, upper = 0, posterior_B_alpha, posterior_B_beta, posterior_A_alpha, posterior_A_beta)
