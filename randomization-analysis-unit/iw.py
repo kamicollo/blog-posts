@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import gif
+import polars as pl
 
 
 def generate_dataset(
@@ -54,6 +55,145 @@ def generate_experiment_datasets(sessions, conversions, num_experiments=5000):
     conversions_test = np.array(_conversions_test).astype(np.float64)
 
     return sessions_ctrl, sessions_test, conversions_ctrl, conversions_test
+
+
+def convert_experiment_to_dataframe(
+    sessions_ctrl, sessions_test, conversions_ctrl, conversions_test, experiment_idx=0
+):
+    """
+    Convert experiment data from iw.py format to functions.py DataFrame format.
+
+    This function takes the output of iw.generate_experiment_datasets() and converts
+    a single experiment into a format compatible with the analysis functions in this module.
+
+    Parameters:
+    -----------
+    sessions_ctrl : np.ndarray
+        Array of shape (num_experiments, num_users/2) with sessions per user in control group
+    sessions_test : np.ndarray
+        Array of shape (num_experiments, num_users/2) with sessions per user in test group
+    conversions_ctrl : np.ndarray
+        Array of shape (num_experiments, num_users/2) with conversions per user in control group
+    conversions_test : np.ndarray
+        Array of shape (num_experiments, num_users/2) with conversions per user in test group
+    experiment_idx : int, default=0
+        Which experiment index to convert (0 to num_experiments-1)
+
+    Returns:
+    --------
+    pl.DataFrame
+        DataFrame with columns: unit_id, base_success_rate, treatment_group,
+        obs_treatment_groups, adjusted_success_rate, obs_success_rate, outcome, obs_outcome
+        Compatible with analysis functions in this module.
+    """
+
+    # Extract data for the specified experiment
+    ctrl_sessions = sessions_ctrl[experiment_idx].astype(int)
+    test_sessions = sessions_test[experiment_idx].astype(int)
+    ctrl_conversions = conversions_ctrl[experiment_idx].astype(int)
+    test_conversions = conversions_test[experiment_idx].astype(int)
+
+    # Create unit-level data
+    num_ctrl_units = len(ctrl_sessions)
+    num_test_units = len(test_sessions)
+
+    # Control group data
+    ctrl_unit_ids = np.arange(num_ctrl_units)
+    ctrl_treatment_groups = np.zeros(num_ctrl_units, dtype=int)  # 0 for control
+    ctrl_base_success_rates = (
+        ctrl_conversions / ctrl_sessions
+    )  # Observed conversion rate as proxy for base rate
+
+    # Test group data
+    test_unit_ids = np.arange(num_ctrl_units, num_ctrl_units + num_test_units)
+    test_treatment_groups = np.ones(num_test_units, dtype=int)  # 1 for test
+    test_base_success_rates = (
+        test_conversions / test_sessions
+    )  # Observed conversion rate as proxy for base rate
+
+    # Combine unit-level data
+    all_unit_ids = np.concatenate([ctrl_unit_ids, test_unit_ids])
+    all_sessions = np.concatenate([ctrl_sessions, test_sessions])
+    all_conversions = np.concatenate([ctrl_conversions, test_conversions])
+    all_treatment_groups = np.concatenate(
+        [ctrl_treatment_groups, test_treatment_groups]
+    )
+    all_base_rates = np.concatenate([ctrl_base_success_rates, test_base_success_rates])
+
+    # Expand to observation level (each session becomes a row)
+    expanded_data = []
+
+    for unit_idx, (
+        unit_id,
+        sessions,
+        conversions,
+        treatment_group,
+        base_rate,
+    ) in enumerate(
+        zip(
+            all_unit_ids,
+            all_sessions,
+            all_conversions,
+            all_treatment_groups,
+            all_base_rates,
+        )
+    ):
+        # Create one row per session for this unit
+        unit_data = {
+            "unit_id": np.full(sessions, unit_id),
+            "base_success_rate": np.full(sessions, base_rate),
+            "treatment_group": np.full(sessions, treatment_group),
+            "obs_treatment_groups": np.full(
+                sessions, treatment_group
+            ),  # Same as unit-level for this data
+            "adjusted_success_rate": np.full(sessions, base_rate),  # No impact applied
+            "obs_success_rate": np.full(sessions, base_rate),  # Same as base rate
+        }
+
+        # Generate outcomes: first 'conversions' sessions are successful, rest are not
+        outcomes = np.zeros(sessions, dtype=int)
+        if conversions > 0:
+            outcomes[:conversions] = 1
+        # Shuffle to randomize which sessions converted
+        np.random.shuffle(outcomes)
+
+        unit_data["outcome"] = outcomes
+        unit_data["obs_outcome"] = outcomes.copy()  # Same as outcome for this data
+
+        expanded_data.append(unit_data)
+
+    # Combine all units into single arrays
+    combined_data = {}
+    for key in expanded_data[0].keys():
+        combined_data[key] = np.concatenate([unit[key] for unit in expanded_data])
+
+    # Create DataFrame
+    df = pl.DataFrame(combined_data)
+
+    return df
+
+
+def generate_experiment_dataframe(
+    num_users=10000,
+    baseline_conversion_rate=0.2,
+    sessions_skew=0.5,  # controls variance in sessions per user. higher = more variance
+    beta_size=1000,  # controls variance in conversion. higher = less variance
+    cvr_decay_factor=0.1,
+    #     cvr_func=lambda x,y: x
+):
+    sessions, conversions, conversion_rates = generate_dataset(
+        num_users,
+        baseline_conversion_rate,
+        sessions_skew,
+        beta_size,
+        cvr_decay_factor,
+    )
+    sessions_ctrl, sessions_test, conversions_ctrl, conversions_test = (
+        generate_experiment_datasets(sessions, conversions, 1)
+    )
+    return convert_experiment_to_dataframe(
+        sessions_ctrl, sessions_test, conversions_ctrl, conversions_test
+    )
 
 
 def get_bootstrapped_null_hypothesis_distribution(
@@ -206,7 +346,7 @@ def plot(
     ax1.set_xlabel("Sessions per user")
     ax1.set_ylabel("Sessions conversion rate")
     ax1.yaxis.set_major_formatter(ticker.PercentFormatter(xmax=1))
-    ax1.set_ylim(0, 0.3)
+    ax1.set_ylim(0, 1)
 
     textstr = (
         r"$CVR_{base}(\frac{1}{10} + \frac{9}{10}e^{-%.2f*(num\_sessions-1)})$"

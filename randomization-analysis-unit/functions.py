@@ -9,8 +9,8 @@ def generate_dataset(
     num_units,
     num_obs,
     distr: Literal["geom", "pareto"] = "geom",
-    alpha=50,
-    beta=50,
+    beta_size=100,
+    baseline_conversion_rate=0.5,
     impact=0.0,
     random_seed=None,
 ):
@@ -21,10 +21,10 @@ def generate_dataset(
     -----------
     num_units : int
         Number of units in the dataset
-    alpha : float, default=2
-        Alpha parameter for beta distribution (base success rate)
-    beta : float, default=5
-        Beta parameter for beta distribution (base success rate)
+    beta_size : float, default=100
+        Size parameter for beta distribution (alpha + beta). Higher values = lower variance.
+    baseline_conversion_rate : float, default=0.5
+        Mean of the beta distribution (alpha / (alpha + beta)). Expected conversion rate.
     geom_p : float, default=0.2
         Probability parameter for geometric distribution (number of observations per unit)
     impact : float, default=0.0
@@ -53,7 +53,21 @@ def generate_dataset(
         num_obs_per_unit = stsb.geom.rvs(p=geom_p, size=num_units)
 
     # Generate base success rates per unit (vectorized)
-    base_success_rates = stsb.beta.rvs(a=alpha, b=beta, size=num_units)
+    # Convert beta_size and baseline_conversion_rate to alpha and beta parameters
+    alpha = baseline_conversion_rate * beta_size
+    beta = (1 - baseline_conversion_rate) * beta_size
+    base_success_rates = stsb.beta.rvs(
+        a=alpha + num_obs_per_unit / num_obs_per_unit.sum() * beta_size,
+        b=beta,
+        size=num_units,
+    )
+
+    # cvr_decay_factor = 1
+    # cvr_func = lambda x, y: x * (19 / 10 - 9 / 10 * np.exp(-1 * cvr_decay_factor * (y - 1)))
+    # rates = cvr_func(baseline_conversion_rate, num_obs_per_unit)
+    # a = rates * beta_size
+    # b = beta_size - rates * beta_size
+    # base_success_rates = np.random.beta(a, b, size=num_units)
 
     # Assign units to test (1) or control (0) group with 50% probability
     treatment_groups = stsb.bernoulli.rvs(p=0.5, size=num_units)
@@ -361,6 +375,85 @@ def delta_method(df):
         "ci_lower": ci_lower,
         "ci_upper": ci_upper,
     }
+
+
+def convert_dataframe_to_experiment_arrays(df, num_experiments=5000):
+    """
+    Convert functions.py DataFrame format to iw.py experiment arrays format.
+
+    This function takes a DataFrame from functions.generate_dataset() and converts it
+    to the format expected by iw.py functions (sessions and conversions per user arrays).
+
+    Parameters:
+    -----------
+    df : pl.DataFrame
+        DataFrame with observation-level data from functions.generate_dataset()
+        Must have columns: unit_id, treatment_group, outcome
+    num_experiments : int, default=5000
+        Number of random experiment assignments to generate
+
+    Returns:
+    --------
+    tuple of ((sessions, conversion_rates), (sessions_ctrl, sessions_test, conversions_ctrl, conversions_test))
+        - sessions : np.ndarray of sessions per user
+        - conversion_rates : np.ndarray of conversion rates per user
+        - sessions_ctrl : np.ndarray of shape (num_experiments, num_control_units)
+        - sessions_test : np.ndarray of shape (num_experiments, num_test_units)
+        - conversions_ctrl : np.ndarray of shape (num_experiments, num_control_units)
+        - conversions_test : np.ndarray of shape (num_experiments, num_test_units)
+    """
+
+    # Aggregate observation-level data to user-level data
+    user_summary = df.group_by("unit_id").agg(
+        [
+            pl.len().alias("sessions"),  # Number of sessions per user
+            pl.sum("outcome").alias("conversions"),  # Number of conversions per user
+            pl.first("treatment_group").alias(
+                "original_treatment_group"
+            ),  # Original assignment (not used for experiments)
+        ]
+    )
+
+    # Convert to numpy arrays for easier manipulation
+    user_ids = user_summary["unit_id"].to_numpy()
+    sessions = user_summary["sessions"].to_numpy()
+    conversions = user_summary["conversions"].to_numpy()
+
+    # Calculate conversion rates per user
+    conversion_rates = conversions / sessions
+
+    num_users = len(user_ids)
+
+    # Generate multiple random experiment assignments
+    sessions_ctrl_list = []
+    sessions_test_list = []
+    conversions_ctrl_list = []
+    conversions_test_list = []
+
+    for experiment_idx in range(num_experiments):
+        # Randomly assign users to control/test groups (50/50 split)
+        assignments = np.random.choice(num_users, num_users, replace=False)
+        control_idxs = assignments[: int(num_users / 2)]
+        test_idxs = assignments[int(num_users / 2) :]
+
+        # Extract sessions and conversions for each group
+        sessions_ctrl_list.append(sessions[control_idxs])
+        sessions_test_list.append(sessions[test_idxs])
+        conversions_ctrl_list.append(conversions[control_idxs])
+        conversions_test_list.append(conversions[test_idxs])
+
+    # Convert to numpy arrays with proper shape
+    sessions_ctrl = np.array(sessions_ctrl_list, dtype=np.float64)
+    sessions_test = np.array(sessions_test_list, dtype=np.float64)
+    conversions_ctrl = np.array(conversions_ctrl_list, dtype=np.float64)
+    conversions_test = np.array(conversions_test_list, dtype=np.float64)
+
+    return (sessions, conversion_rates), (
+        sessions_ctrl,
+        sessions_test,
+        conversions_ctrl,
+        conversions_test,
+    )
 
 
 def analyze_treatment_effect(df, methods=None):
